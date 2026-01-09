@@ -200,6 +200,8 @@ REGRAS DE EXTRAÇÃO:
    - Compare a descrição com as subcategorias disponíveis
    - Escolha a categoria e subcategoria que melhor se encaixam semanticamente
    - Se não houver correspondência exata, escolha a mais próxima
+   - IMPORTANTE: Se não tiver 100% de certeza da subcategoria, reduza o valor de "confianca" para abaixo de 0.8
+   - Se confianca < 0.8, adicione um campo "aviso_categoria" no JSON explicando a incerteza
 
 CATEGORIAS DISPONÍVEIS:
 {categories_context}
@@ -207,6 +209,13 @@ CATEGORIAS DISPONÍVEIS:
 6. FORNECEDOR (opcional):
    - Extraia o nome do fornecedor/prestador de serviço se mencionado
    - Exemplo: "Pagamento para Copel" -> fornecedor: "Copel"
+
+7. PAGAMENTO REALIZADO (pagamento_realizado):
+   - Se a mensagem indicar que o pagamento já foi realizado (ex: "Paguei hoje", "Já paguei", "Pagamento efetuado"),
+     defina pagamento_realizado como true
+   - Se pagamento_realizado for true e houver um valor pago diferente (ex: "Paguei R$ 550, mas devia R$ 500"),
+     extraia o valor pago em "valor_pago"
+   - Se não mencionado, assuma pagamento_realizado como false
 
 OUTPUT:
 Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem comentários):
@@ -218,14 +227,26 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem comentári
     "categoria_sugerida": "Despesa Fixa",
     "subcategoria_sugerida": "Contas de consumo",
     "fornecedor": "Copel",
-    "confianca": 0.95
+    "confianca": 0.95,
+    "pagamento_realizado": false,
+    "valor_pago": null,
+    "aviso_categoria": null
 }}
+
+CAMPOS OBRIGATÓRIOS: valor, descricao, data_caixa, data_competencia, categoria_sugerida, subcategoria_sugerida, confianca
+CAMPOS OPCIONAIS: fornecedor, pagamento_realizado (default: false), valor_pago (default: null), aviso_categoria (default: null)
+
+NOTA SOBRE aviso_categoria:
+- Use este campo APENAS se confianca < 0.8
+- Explique brevemente a incerteza (ex: "Não encontrei correspondência exata. Escolhi a mais próxima: 'Material geral'")
 
 IMPORTANTE:
 - Sempre retorne JSON válido
 - Sempre respeite a regra de retroação para contas de consumo
 - Use as categorias exatas do glossário fornecido
-- Se não tiver certeza, reduza o valor de "confianca" (0.0 a 1.0)"""
+- Se não tiver 100% de certeza da subcategoria, reduza "confianca" para < 0.8 e adicione "aviso_categoria"
+- Se o pagamento já foi realizado, defina pagamento_realizado como true
+- Se houver multas/juros (valor pago > valor original), inclua em valor_pago"""
     
     def _format_categories_context(self, context_categories: List[Dict[str, str]]) -> str:
         """
@@ -327,6 +348,26 @@ IMPORTANTE:
         except (ValueError, TypeError):
             confianca = 0.5  # Valor padrão se inválido
         
+        # Normaliza pagamento realizado
+        pagamento_realizado = extracted_data.get('pagamento_realizado', False)
+        if isinstance(pagamento_realizado, str):
+            pagamento_realizado = pagamento_realizado.lower() in ('true', '1', 'yes', 'sim', 'já', 'paguei')
+        
+        # Normaliza valor pago (se fornecido)
+        valor_pago = None
+        if pagamento_realizado:
+            valor_pago_str = extracted_data.get('valor_pago')
+            if valor_pago_str:
+                try:
+                    valor_pago = Decimal(str(valor_pago_str))
+                    if valor_pago <= 0:
+                        valor_pago = None  # Ignora se inválido
+                except (InvalidOperation, ValueError, TypeError):
+                    valor_pago = None
+        
+        # Normaliza aviso de categoria (se confiança baixa)
+        aviso_categoria = extracted_data.get('aviso_categoria', '').strip() if confianca < 0.8 else None
+        
         return {
             'valor': valor,
             'descricao': descricao,
@@ -335,7 +376,10 @@ IMPORTANTE:
             'categoria_sugerida': categoria_sugerida,
             'subcategoria_sugerida': subcategoria_sugerida,
             'fornecedor': fornecedor,
-            'confianca': confianca
+            'confianca': confianca,
+            'pagamento_realizado': pagamento_realizado,
+            'valor_pago': float(valor_pago) if valor_pago else None,
+            'aviso_categoria': aviso_categoria
         }
     
     def _parse_date(self, date_str: str) -> date:

@@ -12,7 +12,7 @@ app_name = 'core'
 
 urlpatterns = [
     # Webhooks da Evolution API
+    # Nota: evolution_webhook agora processa tanto mensagens quanto respostas de botões
     path('webhooks/evolution/', webhooks.evolution_webhook, name='evolution_webhook'),
-    path('webhooks/evolution/buttons/', webhooks.evolution_buttons_webhook, name='evolution_buttons_webhook'),
 ]
 

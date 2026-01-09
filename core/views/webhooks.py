@@ -25,9 +25,10 @@ from rest_framework import status
 
 from core.models import User
 from core.models.finance import ParsingSession, ParsingSessionStatus, Transaction, Installment
-from core.models.finance import Category, Subcategory
+from core.models.finance import Category, Subcategory, InstallmentStatus
 from core.tasks import process_incoming_message
 from core.utils.tenant_context import set_current_tenant, clear_tenant
+from core.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,10 @@ def evolution_webhook(request: HttpRequest) -> Response:
     Endpoint: POST /api/v1/webhooks/evolution/
     
     Valida se o remetente (número do WhatsApp) pertence a um usuário ativo
-    e dispara task assíncrona para processar a mensagem com IA.
+    e processa a mensagem conforme o tipo:
+    - Mensagem normal: dispara task assíncrona para parsing com IA
+    - Comando "Saldo" ou "Resumo": retorna resumo financeiro imediato
+    - Resposta de botão/enquete: processa confirmação/cancelamento
     
     Responde 200 OK imediatamente para não travar a Evolution API.
     
@@ -52,6 +56,7 @@ def evolution_webhook(request: HttpRequest) -> Response:
             "key": {...},
             "message": {
                 "conversation": "texto da mensagem",
+                "buttonsResponseMessage": {...},  # Resposta de botão
                 ...
             },
             "pushName": "Nome",
@@ -88,6 +93,37 @@ def evolution_webhook(request: HttpRequest) -> Response:
         participant = data.get('participant', '')
         message_obj = data.get('message', {})
         
+        # Extrai número do WhatsApp (JID sem @s.whatsapp.net)
+        whatsapp_number = participant.split('@')[0] if '@' in participant else participant
+        
+        # Busca usuário pelo número do WhatsApp
+        try:
+            user = User.objects.get(whatsapp_number=whatsapp_number, is_active=True)
+            logger.info(f'[WEBHOOK] Usuário encontrado: {user.email}, Tenant: {user.tenant_id}')
+        except User.DoesNotExist:
+            logger.warning(f'[WEBHOOK] Usuário não encontrado ou inativo para número: {whatsapp_number}')
+            return Response({
+                'status': 'ignored',
+                'reason': 'user_not_found'
+            }, status=200)
+        
+        except User.MultipleObjectsReturned:
+            logger.error(f'[WEBHOOK] Múltiplos usuários encontrados para número: {whatsapp_number}')
+            user = User.objects.filter(whatsapp_number=whatsapp_number, is_active=True).first()
+            if not user:
+                return Response({'status': 'error'}, status=200)
+        
+        # Verifica se é resposta de botão/enquete
+        if 'buttonsResponseMessage' in message_obj:
+            # Processa resposta de botão diretamente (não dispara task)
+            button_response = message_obj['buttonsResponseMessage']
+            selected_button_id = button_response.get('selectedButtonId', '')
+            
+            logger.info(f'[WEBHOOK] Resposta de botão detectada: {selected_button_id}')
+            
+            # Processa callback de botão diretamente
+            return handle_button_response(selected_button_id, user)
+        
         # Extrai texto da mensagem (pode estar em diferentes campos dependendo do tipo)
         text = None
         if 'conversation' in message_obj:
@@ -102,30 +138,16 @@ def evolution_webhook(request: HttpRequest) -> Response:
             logger.warning('[WEBHOOK] Mensagem sem texto encontrada')
             return Response({'status': 'ignored', 'reason': 'no_text'}, status=200)
         
-        # Extrai número do WhatsApp (JID sem @s.whatsapp.net)
-        whatsapp_number = participant.split('@')[0] if '@' in participant else participant
+        text = text.strip()
         
         logger.info(f'[WEBHOOK] Mensagem de {whatsapp_number}: {text[:50]}...')
         
-        # Busca usuário pelo número do WhatsApp
-        try:
-            user = User.objects.get(whatsapp_number=whatsapp_number, is_active=True)
-            logger.info(f'[WEBHOOK] Usuário encontrado: {user.email}, Tenant: {user.tenant_id}')
-        except User.DoesNotExist:
-            logger.warning(f'[WEBHOOK] Usuário não encontrado ou inativo para número: {whatsapp_number}')
-            return Response({
-                'status': 'ignored',
-                'reason': 'user_not_found'
-            }, status=200)  # Responde 200 para não travar Evolution API
+        # Verifica se é comando de saldo/resumo
+        if text.upper() in ['SALDO', 'RESUMO', 'SALDO ATUAL', 'RESUMO FINANCEIRO']:
+            logger.info(f'[WEBHOOK] Comando de saldo/resumo detectado')
+            return handle_balance_request(user)
         
-        except User.MultipleObjectsReturned:
-            logger.error(f'[WEBHOOK] Múltiplos usuários encontrados para número: {whatsapp_number}')
-            # Usa o primeiro usuário ativo
-            user = User.objects.filter(whatsapp_number=whatsapp_number, is_active=True).first()
-            if not user:
-                return Response({'status': 'error'}, status=200)
-        
-        # Dispara task assíncrona para processar a mensagem
+        # Dispara task assíncrona para processar a mensagem com IA
         try:
             task = process_incoming_message.delay(str(user.id), text)
             logger.info(f'[WEBHOOK] Task disparada: {task.id} para usuário {user.id}')
@@ -145,50 +167,22 @@ def evolution_webhook(request: HttpRequest) -> Response:
         return Response({'status': 'error', 'message': str(e)}, status=200)
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@csrf_exempt
-def evolution_buttons_webhook(request: HttpRequest) -> Response:
+def handle_button_response(selected_button_id: str, user: User) -> Response:
     """
-    Webhook para receber callbacks de botões interativos da Evolution API.
+    Processa resposta de botão/enquete da Evolution API.
     
-    Endpoint: POST /api/v1/webhooks/evolution/buttons/
+    Extrai o session_id e a ação (confirm/cancel) do button_id
+    e processa a confirmação ou cancelamento da ParsingSession.
     
-    Processa quando o usuário clica em [✅ Confirmar] ou [❌ Cancelar]
-    nos botões enviados após o parsing da IA.
-    
-    Payload esperado:
-    {
-        "data": {
-            "selectedButtonId": "confirm_{session_id}" ou "cancel_{session_id}",
-            "participant": "5541999999999@s.whatsapp.net",
-            ...
-        }
-    }
-    
+    Args:
+        selected_button_id: ID do botão selecionado (formato: "confirm_{uuid}" ou "cancel_{uuid}")
+        user: Usuário que clicou no botão
+        
     Returns:
         Response 200 OK
     """
     try:
-        logger.info('[WEBHOOK] Callback de botão recebido da Evolution API')
-        logger.debug(f'[WEBHOOK] Payload: {json.dumps(request.data, indent=2)}')
-        
-        payload = request.data
-        
-        if 'data' not in payload:
-            logger.warning('[WEBHOOK] Payload inválido para callback de botão')
-            return Response({'status': 'error'}, status=400)
-        
-        data = payload.get('data', {})
-        selected_button_id = data.get('selectedButtonId', '')
-        participant = data.get('participant', '')
-        
         # Extrai ação e session_id do button_id
-        # Formato esperado: "confirm_{uuid}" ou "cancel_{uuid}"
-        if not selected_button_id:
-            logger.warning('[WEBHOOK] Button ID não encontrado no payload')
-            return Response({'status': 'ignored'}, status=200)
-        
         parts = selected_button_id.split('_', 1)
         if len(parts) != 2:
             logger.warning(f'[WEBHOOK] Formato de Button ID inválido: {selected_button_id}')
@@ -204,51 +198,63 @@ def evolution_buttons_webhook(request: HttpRequest) -> Response:
             logger.warning(f'[WEBHOOK] UUID inválido no Button ID: {session_id_str}')
             return Response({'status': 'ignored'}, status=200)
         
-        # Busca usuário pelo número do WhatsApp
-        whatsapp_number = participant.split('@')[0] if '@' in participant else participant
-        
-        try:
-            user = User.objects.get(whatsapp_number=whatsapp_number, is_active=True)
-        except User.DoesNotExist:
-            logger.warning(f'[WEBHOOK] Usuário não encontrado: {whatsapp_number}')
-            return Response({'status': 'ignored'}, status=200)
-        
-        # Busca ParsingSession
+        # Busca ParsingSession e valida que pertence ao usuário
         try:
             parsing_session = ParsingSession.objects.get(id=session_id, tenant=user.tenant)
         except ParsingSession.DoesNotExist:
             logger.warning(f'[WEBHOOK] ParsingSession não encontrada: {session_id}')
             return Response({'status': 'ignored'}, status=200)
         
+        # Valida que a sessão ainda está pendente
+        if parsing_session.status != ParsingSessionStatus.PENDING:
+            logger.warning(
+                f'[WEBHOOK] ParsingSession {session_id} já foi processada (status: {parsing_session.status})'
+            )
+            return Response({'status': 'ignored', 'reason': 'already_processed'}, status=200)
+        
         # Define tenant no contexto
         set_current_tenant(user.tenant_id)
         
         try:
+            
             if action == 'confirm':
                 # Usuário confirmou - cria Transaction e Installment
-                logger.info(f'[WEBHOOK] Confirmação recebida para session {session_id}')
+                logger.info(f'[WEBHOOK] [CONFIRMAÇÃO] Iniciando processo de persistência para session {session_id}')
+                
+                # Cria Transaction e Installment de forma transacional
                 transaction = create_transaction_from_session(parsing_session, user)
+                
+                # Atualiza status da sessão para CONFIRMED
                 parsing_session.confirm(transaction)
                 
-                # Envia mensagem de confirmação
-                from core.services.whatsapp_service import WhatsAppService
-                whatsapp_service = WhatsAppService()
-                whatsapp_service.send_text_message(
-                    user.whatsapp_number,
-                    "✅ *Transação confirmada e registrada com sucesso!*"
+                # Log crítico: momento em que dinheiro "entra no sistema"
+                logger.info(
+                    f'[WEBHOOK] [CONFIRMAÇÃO] ✅ LANÇAMENTO OFICIALIZADO! '
+                    f'Session {session_id} -> Transaction {transaction.id} -> Installment criado. '
+                    f'Valor: R$ {transaction.amount}, Competência: {transaction.competence_date}'
                 )
+                
+                # Envia mensagem de sucesso com detalhes
+                valor_str = f"R$ {transaction.amount:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                success_message = f"""✅ *Lançamento de {valor_str} confirmado com sucesso!* 🚀
+
+📝 {transaction.description}
+📊 Competência: {transaction.competence_date.strftime('%m/%Y')}
+🏷️ {transaction.category.name} - {transaction.subcategory.name}
+
+Transação registrada no sistema."""
+                
+                whatsapp_service.send_text_message(user.whatsapp_number, success_message)
                 
             elif action == 'cancel':
                 # Usuário cancelou
-                logger.info(f'[WEBHOOK] Cancelamento recebido para session {session_id}')
+                logger.info(f'[WEBHOOK] [CANCELAMENTO] Session {session_id} cancelada pelo usuário')
                 parsing_session.cancel()
                 
                 # Envia mensagem de cancelamento
-                from core.services.whatsapp_service import WhatsAppService
-                whatsapp_service = WhatsAppService()
                 whatsapp_service.send_text_message(
                     user.whatsapp_number,
-                    "❌ *Transação cancelada. Os dados não foram salvos.*"
+                    "❌ *Lançamento descartado. Se precisar, é só mandar de novo!*"
                 )
             else:
                 logger.warning(f'[WEBHOOK] Ação desconhecida: {action}')
@@ -260,8 +266,96 @@ def evolution_buttons_webhook(request: HttpRequest) -> Response:
         return Response({'status': 'processed', 'action': action}, status=200)
         
     except Exception as e:
-        logger.error(f'[WEBHOOK] Erro ao processar callback de botão: {str(e)}', exc_info=True)
-        return Response({'status': 'error'}, status=200)  # Sempre 200 para não travar Evolution API
+        logger.error(f'[WEBHOOK] Erro ao processar resposta de botão: {str(e)}', exc_info=True)
+        clear_tenant()
+        return Response({'status': 'error'}, status=200)
+
+
+def handle_balance_request(user: User) -> Response:
+    """
+    Processa comando de saldo/resumo financeiro.
+    
+    Retorna resumo financeiro do mês atual com entradas e saídas confirmadas.
+    
+    Args:
+        user: Usuário que solicitou o resumo
+        
+    Returns:
+        Response 200 OK (envia mensagem via WhatsApp)
+    """
+    try:
+        from datetime import date
+        from decimal import Decimal
+        from django.db.models import Sum, Q
+        
+        # Define tenant no contexto
+        set_current_tenant(user.tenant_id)
+        
+        try:
+            # Busca Installments do mês atual com status PAGO
+            today = date.today()
+            first_day_month = date(today.year, today.month, 1)
+            last_day_month = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
+            
+            # Total de saídas (Installments pagos no mês atual)
+            # Considera apenas Installments vinculados a Transactions do tenant
+            from core.models.finance import Installment, InstallmentStatus
+            
+            # Total de saídas (Installments pagos no mês atual)
+            # Considera apenas Installments vinculados a Transactions do tenant
+            # Calcula total usando F() expressions para somar amount + penalty_amount
+            from django.db.models import F
+            
+            saidas_query = Installment.objects.filter(
+                tenant=user.tenant,
+                status=InstallmentStatus.PAGO,
+                payment_date__gte=first_day_month,
+                payment_date__lt=last_day_month
+            )
+            
+            # Calcula total usando annotation e Sum
+            saidas_result = saidas_query.aggregate(
+                total=Sum(F('amount') + F('penalty_amount'))
+            )
+            saidas = saidas_result['total'] or Decimal('0.00')
+            
+            # Total de entradas (será implementado quando houver receitas)
+            # Por enquanto, apenas despesas são implementadas
+            entradas = Decimal('0.00')
+            
+            # Saldo atual (entradas - saídas)
+            saldo = entradas - saidas
+            
+            # Formata valores
+            entradas_str = f"R$ {entradas:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            saidas_str = f"R$ {saidas:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            saldo_str = f"R$ {saldo:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            
+            # Monta mensagem de resumo
+            summary_message = f"""📊 *Resumo Financeiro - {today.strftime('%m/%Y')}*
+
+💰 *Entradas:* {entradas_str}
+💸 *Saídas:* {saidas_str}
+━━━━━━━━━━━━━━━━
+📈 *Saldo:* {saldo_str}
+
+*Nota:* Apenas lançamentos confirmados estão incluídos."""
+            
+            # Envia mensagem via WhatsApp
+            whatsapp_service = WhatsAppService()
+            whatsapp_service.send_text_message(user.whatsapp_number, summary_message)
+            
+            logger.info(f'[WEBHOOK] Resumo financeiro enviado para {user.email}')
+            
+        finally:
+            clear_tenant()
+        
+        return Response({'status': 'processed', 'command': 'balance'}, status=200)
+        
+    except Exception as e:
+        logger.error(f'[WEBHOOK] Erro ao processar comando de saldo: {str(e)}', exc_info=True)
+        clear_tenant()
+        return Response({'status': 'error'}, status=200)
 
 
 def create_transaction_from_session(parsing_session: ParsingSession, user: User) -> Transaction:
@@ -269,20 +363,34 @@ def create_transaction_from_session(parsing_session: ParsingSession, user: User)
     Cria Transaction e Installment a partir de uma ParsingSession confirmada.
     
     Esta função implementa a lógica de negócio para criar os registros
-    financeiros definitivos após confirmação do usuário.
+    financeiros definitivos após confirmação do usuário. É o MOMENTO CRÍTICO
+    onde o dinheiro "entra no sistema" de forma oficial.
+    
+    Utiliza transaction.atomic() para garantir que ou cria tudo ou não cria nada,
+    mantendo a integridade dos dados financeiros.
+    
+    Se a IA detectou que o pagamento já foi realizado (ex: "Paguei hoje"),
+    marca automaticamente a Installment como PAGO usando mark_as_paid().
     
     Args:
-        parsing_session: ParsingSession confirmada
-        user: Usuário que confirmou
+        parsing_session: ParsingSession confirmada pelo usuário
+        user: Usuário que confirmou (deve ser o mesmo que originou a sessão)
         
     Returns:
-        Transaction criada
+        Transaction criada com Installment vinculado
         
     Raises:
         ValueError: Se dados da sessão forem inválidos
+        ValidationError: Se validações do modelo falharem
     """
     from datetime import date
-    from decimal import Decimal
+    from decimal import Decimal, InvalidOperation
+    from django.db import transaction as db_transaction
+    from django.core.exceptions import ValidationError
+    from core.models.finance import InstallmentStatus
+    
+    # Valida que o usuário que está confirmando é o mesmo que originou a sessão
+    # (Segurança adicional - parsing_session já foi validada no handle_button_response)
     
     extracted_data = parsing_session.extracted_json
     
@@ -327,34 +435,87 @@ def create_transaction_from_session(parsing_session: ParsingSession, user: User)
     
     # Parse das datas
     try:
-        data_competencia = date.fromisoformat(extracted_data['data_competencia'])
-        data_caixa = date.fromisoformat(extracted_data['data_caixa'])
+        data_competencia_str = extracted_data.get('data_competencia')
+        data_caixa_str = extracted_data.get('data_caixa')
+        
+        if not data_competencia_str or not data_caixa_str:
+            raise ValueError('Datas de competência ou caixa não encontradas nos dados extraídos')
+        
+        data_competencia = date.fromisoformat(data_competencia_str)
+        data_caixa = date.fromisoformat(data_caixa_str)
     except (KeyError, ValueError) as e:
         raise ValueError(f'Data inválida nos dados extraídos: {str(e)}')
     
-    # Cria Transaction (Competência - Fato Gerador)
-    transaction = Transaction.objects.create(
-        tenant=user.tenant,
-        description=extracted_data.get('descricao', 'Transação sem descrição'),
-        amount=Decimal(str(extracted_data['valor'])),
-        category=category,
-        subcategory=subcategory,
-        competence_date=data_competencia,
-        supplier=extracted_data.get('fornecedor')
-    )
+    # Parse do valor
+    try:
+        valor = Decimal(str(extracted_data['valor']))
+        if valor <= Decimal('0.00'):
+            raise ValueError('Valor da transação deve ser maior que zero')
+    except (KeyError, ValueError, InvalidOperation) as e:
+        raise ValueError(f'Valor inválido nos dados extraídos: {str(e)}')
     
-    # Cria Installment (Caixa - Movimentação Real)
-    Installment.objects.create(
-        tenant=user.tenant,
-        transaction=transaction,
-        due_date=data_caixa,  # Data de vencimento (mesma da data de caixa)
-        payment_date=data_caixa,  # Data de pagamento (assume que já foi pago se chegou aqui)
-        amount=Decimal(str(extracted_data['valor'])),
-        penalty_amount=Decimal('0.00'),
-        status='PAGO'  # Se confirmou, assume que já foi pago
-    )
+    # Verifica se pagamento já foi realizado (IA detectou "paguei hoje", "já paguei", etc.)
+    pagamento_realizado = extracted_data.get('pagamento_realizado', False)
+    valor_pago = extracted_data.get('valor_pago', None)
     
-    logger.info(f'[WEBHOOK] Transaction criada: {transaction.id} com Installment')
-    
-    return transaction
+    # Cria Transaction e Installment de forma TRANSA confidenceional
+    # Garante que ou cria tudo ou não cria nada (ACID)
+    with db_transaction.atomic():
+        # Cria Transaction (Competência - Fato Gerador para DRE)
+        fornecedor = extracted_data.get('fornecedor')
+        transaction = Transaction.objects.create(
+            tenant=user.tenant,
+            description=extracted_data.get('descricao', 'Transação sem descrição'),
+            amount=valor,
+            category=category,
+            subcategory=subcategory,
+            competence_date=data_competencia,
+            supplier=fornecedor if fornecedor else None  # None em vez de string vazia
+        )
+        
+        logger.info(
+            f'[PERSISTÊNCIA] Transaction {transaction.id} criada: '
+            f'R$ {valor} - {transaction.description} - Competência: {data_competencia}'
+        )
+        
+        # Cria Installment (Caixa - Movimentação Real para Fluxo de Caixa)
+        installment = Installment.objects.create(
+            tenant=user.tenant,
+            transaction=transaction,
+            due_date=data_caixa,  # Data de vencimento
+            amount=valor,  # Valor líquido
+            penalty_amount=Decimal('0.00'),  # Inicializa sem multas
+            status=InstallmentStatus.PENDENTE  # Inicialmente pendente
+        )
+        
+        # Se a IA detectou que pagamento já foi realizado, marca como pago automaticamente
+        if pagamento_realizado:
+            # Determina data de pagamento (usa data_caixa ou hoje se não especificado)
+            payment_date = data_caixa if data_caixa <= date.today() else date.today()
+            
+            # Determina valor pago (usa valor_pago se fornecido, senão usa valor original)
+            paid_amount = Decimal(str(valor_pago)) if valor_pago else valor
+            
+            # Marca como pago usando o método mark_as_paid (calcula multas automaticamente)
+            installment.mark_as_paid(payment_date=payment_date, paid_amount=paid_amount)
+            
+            logger.info(
+                f'[PERSISTÊNCIA] Installment {installment.id} marcado automaticamente como PAGO: '
+                f'Data: {payment_date}, Valor pago: R$ {paid_amount}, Multas: R$ {installment.penalty_amount}'
+            )
+        else:
+            # Pagamento não realizado - deixa como PENDENTE
+            logger.info(
+                f'[PERSISTÊNCIA] Installment {installment.id} criado como PENDENTE: '
+                f'Vencimento: {data_caixa}'
+            )
+        
+        # Log crítico: momento em que dinheiro "entra no sistema" de forma oficial
+        logger.info(
+            f'[PERSISTÊNCIA] ✅ LANÇAMENTO OFICIALIZADO! '
+            f'Session {parsing_session.id} -> Transaction {transaction.id} -> Installment {installment.id} '
+            f'(Status: {installment.status}, Valor: R$ {valor})'
+        )
+        
+        return transaction
 

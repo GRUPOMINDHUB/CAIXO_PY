@@ -226,6 +226,9 @@ def format_extraction_summary(extracted_data: dict) -> str:
     """
     Formata os dados extraídos pela IA em um resumo legível para o usuário.
     
+    Se a confiança for baixa (< 0.8), adiciona um aviso para o usuário conferir
+    a categorização sugerida.
+    
     Args:
         extracted_data: Dicionário com dados extraídos pela IA
         
@@ -247,6 +250,9 @@ def format_extraction_summary(extracted_data: dict) -> str:
     categoria = extracted_data.get('categoria_sugerida', 'N/A')
     subcategoria = extracted_data.get('subcategoria_sugerida', 'N/A')
     fornecedor = extracted_data.get('fornecedor')
+    confianca = extracted_data.get('confianca', 0.8)
+    aviso_categoria = extracted_data.get('aviso_categoria')
+    pagamento_realizado = extracted_data.get('pagamento_realizado', False)
     
     # Formata valor em formato brasileiro (R$ 500,00)
     valor_str = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
@@ -260,6 +266,20 @@ def format_extraction_summary(extracted_data: dict) -> str:
     
     if fornecedor:
         summary += f"\n🏢 *Fornecedor:* {fornecedor}"
+    
+    # Adiciona aviso se confiança for baixa
+    if confianca < 0.8 and aviso_categoria:
+        summary += f"\n\n⚠️ *Aviso:* {aviso_categoria}\nPor favor, confira se a categoria está correta!"
+    elif confianca < 0.8:
+        summary += f"\n\n⚠️ *Atenção:* Não tenho 100% de certeza sobre a categorização. Por favor, confira!"
+    
+    # Adiciona informação sobre pagamento realizado
+    if pagamento_realizado:
+        summary += f"\n✅ *Pagamento já realizado*"
+        valor_pago = extracted_data.get('valor_pago')
+        if valor_pago and valor_pago != float(valor):
+            valor_pago_str = f"R$ {valor_pago:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            summary += f" (Valor pago: {valor_pago_str})"
     
     return summary
 
