@@ -189,17 +189,20 @@ class TenantModel(models.Model):
         Sobrescreve save para garantir que tenant_id seja sempre definido.
         
         Se não houver tenant_id definido, tenta obter do contexto thread-local.
-        Se ainda assim não houver, levanta ValidationError.
+        Se ainda assim não houver e o campo permitir null, não levanta erro
+        (caso de categorias globais). Caso contrário, levanta ValidationError.
         """
         # Se o tenant não foi definido, tenta obter do contexto
         if not self.tenant_id:
             tenant_id = get_current_tenant()
             if tenant_id:
                 self.tenant_id = tenant_id
-            else:
+            elif not self._meta.get_field('tenant').null:
+                # Se o campo não permite null, levanta erro
                 raise ValidationError(
                     'Tenant é obrigatório. Defina o tenant no contexto ou passe explicitamente.'
                 )
+            # Se permite null e não há tenant no contexto, permite None (categorias globais)
         
         super().save(*args, **kwargs)
     
