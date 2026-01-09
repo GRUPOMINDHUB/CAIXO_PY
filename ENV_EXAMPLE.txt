@@ -18,8 +18,9 @@ DB_PORT=5432
 # EMAIL_HOST_USER=
 # EMAIL_HOST_PASSWORD=
 
-# APIs Externas (futuro)
-# OPENAI_API_KEY=
-# EVOLUTION_API_URL=
-# EVOLUTION_API_KEY=
+# APIs Externas
+OPENAI_API_KEY=sk-sua-chave-openai-aqui
+EVOLUTION_API_URL=http://localhost:8080
+EVOLUTION_API_KEY=sua-chave-evolution-api-aqui
+EVOLUTION_INSTANCE_NAME=caixo_instance
 

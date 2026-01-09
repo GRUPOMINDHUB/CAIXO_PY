@@ -12,8 +12,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # API URLs serão adicionadas aqui no futuro
-    # path('api/v1/', include('core.urls')),
+    # API REST e Webhooks
+    path('api/v1/', include('core.urls')),
 ]
 
 # Configuração do título do Admin

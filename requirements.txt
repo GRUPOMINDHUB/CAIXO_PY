@@ -10,9 +10,15 @@ python-dotenv>=1.0.0
 # Utilitários
 python-dateutil>=2.8.2
 
-# Processamento Assíncrono (futuro)
-# celery>=5.3.0
-# redis>=5.0.0
+# Processamento Assíncrono
+celery>=5.3.0
+redis>=5.0.0
+
+# Inteligência Artificial
+openai>=1.12.0
+
+# HTTP Requests
+requests>=2.31.0
 
 # Validação e Segurança
 django-extensions>=3.2.3
