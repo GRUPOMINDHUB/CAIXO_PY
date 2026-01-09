@@ -506,6 +506,41 @@ class ParsingSessionStatus(models.TextChoices):
     CANCELED = 'CANCELED', 'Cancelado'
 
 
+def invoice_upload_path(instance, filename: str) -> str:
+    """
+    Gera o caminho para armazenar comprovantes/invoices por tenant.
+    
+    Estrutura: media/tenants/{tenant_id}/invoices/{session_id}_{filename}
+    
+    Nota: Esta função é chamada automaticamente pelo Django quando um arquivo
+    é salvo no campo ImageField. O Django cria a estrutura de pastas automaticamente.
+    
+    Args:
+        instance: Instância do ParsingSession (deve ter id e tenant_id)
+        filename: Nome original do arquivo
+        
+    Returns:
+        Caminho relativo para armazenamento do arquivo (sem o prefixo MEDIA_ROOT)
+    """
+    # Extrai extensão do arquivo
+    extension = filename.split('.')[-1] if '.' in filename else 'jpg'
+    
+    # Gera nome único baseado no session_id
+    # Se instance ainda não tem id (ainda não foi salvo), usa timestamp
+    if hasattr(instance, 'id') and instance.id:
+        session_id = str(instance.id)
+        # Usa apenas os primeiros 8 caracteres do UUID para nome mais curto
+        session_id_short = session_id.replace('-', '')[:8]
+        unique_filename = f"{session_id_short}.{extension}"
+    else:
+        # Fallback: usa timestamp se ainda não tiver ID
+        from django.utils import timezone
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        unique_filename = f"{timestamp}.{extension}"
+    
+    return f"tenants/{instance.tenant_id}/invoices/{unique_filename}"
+
+
 class ParsingSession(TenantModel):
     """
     Sessão temporária de parsing pela IA.
@@ -515,20 +550,47 @@ class ParsingSession(TenantModel):
     criar Transaction e Installment definitivos.
     
     Características:
-    - raw_text: Texto original recebido (via WhatsApp)
+    - raw_text: Texto original recebido (via WhatsApp) ou transcrito (de áudio)
     - extracted_json: JSON extraído pela IA com os dados estruturados
+    - image_url: URL da imagem enviada (comprovante/nota fiscal) - opcional
+    - image_file: Arquivo de imagem armazenado localmente - opcional
+    - audio_url: URL do áudio enviado (mensagem de voz) - opcional
     - status: Status da sessão (PENDING, CONFIRMED, CANCELED)
     - expires_at: Data de expiração da sessão (limpeza automática)
     """
     
     raw_text = models.TextField(
         verbose_name='Texto Original',
-        help_text='Texto original da mensagem recebida (WhatsApp)'
+        help_text='Texto original da mensagem recebida (WhatsApp) ou transcrito de áudio'
     )
     
     extracted_json = models.JSONField(
         verbose_name='JSON Extraído',
         help_text='Dados estruturados extraídos pela IA (formato JSON)'
+    )
+    
+    image_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name='URL da Imagem',
+        help_text='URL da imagem (comprovante/nota fiscal) recebida via WhatsApp'
+    )
+    
+    image_file = models.ImageField(
+        upload_to=invoice_upload_path,
+        null=True,
+        blank=True,
+        verbose_name='Arquivo de Imagem',
+        help_text='Arquivo de imagem armazenado localmente em media/tenants/{tenant_id}/invoices/'
+    )
+    
+    audio_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name='URL do Áudio',
+        help_text='URL do áudio (mensagem de voz) recebido via WhatsApp'
     )
     
     status = models.CharField(

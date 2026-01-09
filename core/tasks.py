@@ -34,20 +34,32 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3)
-def process_incoming_message(self, user_id: UUID, text: str) -> Optional[UUID]:
+def process_incoming_message(
+    self,
+    user_id: UUID,
+    text: str,
+    image_url: Optional[str] = None,
+    audio_url: Optional[str] = None
+) -> Optional[UUID]:
     """
     Task assíncrona para processar mensagem recebida via WhatsApp.
     
+    Suporta mensagens de texto, imagens (comprovantes/notas fiscais) e áudio (voz).
+    
     Fluxo de execução:
     1. Recupera o usuário e define o tenant no contexto
-    2. Busca categorias globais e do tenant
-    3. Processa a mensagem com IA (IAProcessor)
-    4. Salva resultado em ParsingSession
-    5. Envia card de confirmação via WhatsApp
+    2. Transcreve áudio se houver (Whisper API)
+    3. Busca categorias globais e LearnedRules do tenant
+    4. Processa a mensagem/imagem com IA (IAProcessor multimodal)
+    5. Baixa e armazena imagem localmente (se houver)
+    6. Salva resultado em ParsingSession
+    7. Envia card de confirmação via WhatsApp
     
     Args:
         user_id: UUID do usuário que enviou a mensagem
-        text: Texto da mensagem recebida
+        text: Texto da mensagem recebida ou caption da imagem
+        image_url: URL da imagem (comprovante/nota fiscal) - opcional
+        audio_url: URL do áudio (mensagem de voz) - opcional
         
     Returns:
         UUID da ParsingSession criada ou None em caso de erro
@@ -77,18 +89,86 @@ def process_incoming_message(self, user_id: UUID, text: str) -> Optional[UUID]:
             clear_tenant()
             return None
         
-        # Passo 2: Busca categorias globais e do tenant para contexto da IA
+        # Passo 2: Transcreve áudio se houver (antes de processar com IA)
+        transcribed_text = text
+        if audio_url:
+            try:
+                logger.info(f'[TASK] Transcrevendo áudio de: {audio_url}')
+                ia_processor = IAProcessor()
+                transcribed_text = ia_processor.transcribe_audio(audio_url)
+                logger.info(f'[TASK] Áudio transcrito: {transcribed_text[:100]}...')
+                
+                # Se não houver texto original, usa a transcrição
+                if not text.strip():
+                    text = transcribed_text
+            except ValueError as e:
+                logger.error(f'[TASK] Erro ao transcrever áudio: {str(e)}')
+                # Envia mensagem de erro ao usuário
+                whatsapp_service = WhatsAppService()
+                whatsapp_jid = user.whatsapp_number
+                if whatsapp_jid:
+                    error_msg = "Não consegui entender o áudio. Pode enviar novamente ou escrever o texto?"
+                    whatsapp_service.send_text_message(whatsapp_jid, error_msg)
+                return None
+        
+        # Passo 3: Busca categorias globais e LearnedRules do tenant
         try:
             categories_context = get_categories_for_ia(user.tenant_id)
             logger.info(f'[TASK] {len(categories_context)} categorias carregadas para contexto da IA')
+            
+            # Busca LearnedRules (regras aprendidas) do tenant
+            from core.models.finance import LearnedRule
+            learned_rules = LearnedRule.objects.filter(
+                tenant=user.tenant,
+                active=True
+            ).select_related('category', 'subcategory').values(
+                'keyword', 'category__name', 'subcategory__name'
+            )
+            
+            # Converte para formato esperado pelo IAProcessor
+            learned_rules_list = []
+            for rule in learned_rules:
+                learned_rules_list.append({
+                    'keyword': rule['keyword'],
+                    'category': rule['category__name'],
+                    'subcategory': rule['subcategory__name']
+                })
+            
+            logger.info(f'[TASK] {len(learned_rules_list)} LearnedRules encontradas para melhorar categorização')
         except Exception as e:
-            logger.error(f'[TASK] Erro ao buscar categorias: {str(e)}')
+            logger.error(f'[TASK] Erro ao buscar categorias/LearnedRules: {str(e)}')
             raise
         
-        # Passo 3: Processa a mensagem com IA
+        # Passo 4: Processa a mensagem/imagem com IA (multimodal se houver imagem)
         try:
             ia_processor = IAProcessor()
-            extracted_data = ia_processor.parse_financial_message(text, categories_context)
+            
+            # Baixa imagem e converte para base64 se houver
+            image_base64 = None
+            if image_url:
+                try:
+                    import requests
+                    import base64
+                    from io import BytesIO
+                    
+                    logger.info(f'[TASK] Baixando imagem de: {image_url}')
+                    img_response = requests.get(image_url, timeout=30)
+                    img_response.raise_for_status()
+                    
+                    # Converte para base64
+                    image_base64 = base64.b64encode(img_response.content).decode('utf-8')
+                    logger.info(f'[TASK] Imagem baixada e convertida para base64 ({len(image_base64)} caracteres)')
+                except Exception as e:
+                    logger.error(f'[TASK] Erro ao baixar imagem: {str(e)}')
+                    # Continua sem imagem, mas loga o erro
+            
+            extracted_data = ia_processor.parse_financial_message(
+                text=transcribed_text if transcribed_text else text,
+                context_categories=categories_context,
+                image_url=image_url if not image_base64 else None,  # Usa URL se não conseguiu baixar
+                image_base64=image_base64,
+                learned_rules=learned_rules_list if learned_rules_list else None
+            )
             logger.info(f'[TASK] Dados extraídos pela IA: {extracted_data}')
         except ValueError as e:
             # Erro na IA - envia mensagem de erro ao usuário
@@ -103,18 +183,56 @@ def process_incoming_message(self, user_id: UUID, text: str) -> Optional[UUID]:
             logger.error(f'[TASK] Erro inesperado no IAProcessor: {str(e)}')
             raise
         
-        # Passo 4: Salva resultado em ParsingSession
+        # Passo 5: Salva resultado em ParsingSession
         try:
             # Cria ParsingSession com os dados extraídos
             expires_at = timezone.now() + timedelta(hours=24)  # Expira em 24 horas
             
-            parsing_session = ParsingSession.objects.create(
+            # Determina texto final (transcrito ou original)
+            final_text = transcribed_text if transcribed_text and transcribed_text != text else text
+            
+            parsing_session = ParsingSession(
                 tenant=user.tenant,
-                raw_text=text,
+                raw_text=final_text,
                 extracted_json=extracted_data,
                 status=ParsingSessionStatus.PENDING,
-                expires_at=expires_at
+                expires_at=expires_at,
+                image_url=image_url if image_url else None,
+                audio_url=audio_url if audio_url else None
             )
+            
+            # Salva para obter o ID
+            parsing_session.save()
+            
+            # Baixa e armazena arquivo de imagem localmente (se houver)
+            if image_url and image_base64:
+                try:
+                    import requests
+                    from django.core.files.base import ContentFile
+                    
+                    img_response = requests.get(image_url, timeout=30)
+                    img_response.raise_for_status()
+                    
+                    # Determina extensão baseada no Content-Type
+                    content_type = img_response.headers.get('Content-Type', 'image/jpeg')
+                    extension = 'jpg'
+                    if 'png' in content_type:
+                        extension = 'png'
+                    elif 'pdf' in content_type:
+                        extension = 'pdf'
+                    
+                    # Salva o arquivo usando upload_to (invoice_upload_path)
+                    image_content = ContentFile(img_response.content)
+                    parsing_session.image_file.save(
+                        f"{parsing_session.id}.{extension}",
+                        image_content
+                    )
+                    parsing_session.save()
+                    logger.info(f'[TASK] Imagem armazenada em: {parsing_session.image_file.path}')
+                except Exception as e:
+                    logger.error(f'[TASK] Erro ao baixar/salvar arquivo de imagem: {str(e)}')
+                    # Continua sem arquivo, mas mantém URL
+            
             parsing_session_id = parsing_session.id
             logger.info(f'[TASK] ParsingSession criada: {parsing_session_id}')
         except Exception as e:

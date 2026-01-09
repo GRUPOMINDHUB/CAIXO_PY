@@ -124,33 +124,82 @@ def evolution_webhook(request: HttpRequest) -> Response:
             # Processa callback de botão diretamente
             return handle_button_response(selected_button_id, user)
         
-        # Extrai texto da mensagem (pode estar em diferentes campos dependendo do tipo)
+        # Extrai tipo de mídia e dados
         text = None
+        image_url = None
+        audio_url = None
+        media_type = 'text'
+        
+        # Detecta tipo de mensagem e extrai dados
         if 'conversation' in message_obj:
             text = message_obj['conversation']
+            media_type = 'text'
         elif 'extendedTextMessage' in message_obj:
             text = message_obj['extendedTextMessage'].get('text', '')
+            media_type = 'text'
         elif 'imageMessage' in message_obj:
-            # Para imagens, extrai caption se houver
-            text = message_obj['imageMessage'].get('caption', '')
+            # Mensagem com imagem (comprovante/nota fiscal)
+            image_msg = message_obj['imageMessage']
+            text = image_msg.get('caption', '')  # Caption opcional
+            # Extrai URL da imagem da Evolution API
+            image_url = image_msg.get('url') or image_msg.get('directPath')
+            # Se não houver URL, tenta obter do contexto (Evolution API às vezes envia assim)
+            if not image_url and 'key' in data:
+                # Constrói URL da Evolution API para download
+                from django.conf import settings
+                evolution_api_url = getattr(settings, 'EVOLUTION_API_URL', 'http://localhost:8080')
+                instance_name = getattr(settings, 'EVOLUTION_INSTANCE_NAME', 'caixo_instance')
+                media_id = image_msg.get('id') or data.get('key', {}).get('id')
+                if media_id:
+                    image_url = f"{evolution_api_url}/message/downloadMedia/{instance_name}/{media_id}"
+            media_type = 'image'
+            logger.info(f'[WEBHOOK] Imagem detectada: {image_url}')
+        elif 'audioMessage' in message_obj or 'pttMessage' in message_obj:
+            # Mensagem de áudio (voice message)
+            audio_msg = message_obj.get('audioMessage') or message_obj.get('pttMessage', {})
+            # Extrai URL do áudio da Evolution API
+            audio_url = audio_msg.get('url') or audio_msg.get('directPath')
+            # Se não houver URL, tenta obter do contexto
+            if not audio_url and 'key' in data:
+                from django.conf import settings
+                evolution_api_url = getattr(settings, 'EVOLUTION_API_URL', 'http://localhost:8080')
+                instance_name = getattr(settings, 'EVOLUTION_INSTANCE_NAME', 'caixo_instance')
+                media_id = audio_msg.get('id') or data.get('key', {}).get('id')
+                if media_id:
+                    audio_url = f"{evolution_api_url}/message/downloadMedia/{instance_name}/{media_id}"
+            media_type = 'audio'
+            text = ""  # Texto será gerado pela transcrição
+            logger.info(f'[WEBHOOK] Áudio detectado: {audio_url}')
+        elif 'videoMessage' in message_obj:
+            # Vídeo pode ter caption
+            text = message_obj['videoMessage'].get('caption', '')
+            media_type = 'video'
+            logger.info('[WEBHOOK] Vídeo detectado (não suportado, usando apenas caption)')
         
-        if not text or not text.strip():
-            logger.warning('[WEBHOOK] Mensagem sem texto encontrada')
-            return Response({'status': 'ignored', 'reason': 'no_text'}, status=200)
+        # Valida que há conteúdo para processar
+        if not text and not image_url and not audio_url:
+            logger.warning('[WEBHOOK] Mensagem sem conteúdo processável encontrada')
+            return Response({'status': 'ignored', 'reason': 'no_content'}, status=200)
         
-        text = text.strip()
+        text = text.strip() if text else ""
         
-        logger.info(f'[WEBHOOK] Mensagem de {whatsapp_number}: {text[:50]}...')
+        logger.info(f'[WEBHOOK] Mensagem de {whatsapp_number} (tipo: {media_type}): {text[:50] if text else "sem texto"}...')
         
-        # Verifica se é comando de saldo/resumo
-        if text.upper() in ['SALDO', 'RESUMO', 'SALDO ATUAL', 'RESUMO FINANCEIRO']:
+        # Verifica se é comando de saldo/resumo (apenas se for texto)
+        if text and text.upper() in ['SALDO', 'RESUMO', 'SALDO ATUAL', 'RESUMO FINANCEIRO']:
             logger.info(f'[WEBHOOK] Comando de saldo/resumo detectado')
             return handle_balance_request(user)
         
         # Dispara task assíncrona para processar a mensagem com IA
+        # Passa imagem/áudio se houver
         try:
-            task = process_incoming_message.delay(str(user.id), text)
-            logger.info(f'[WEBHOOK] Task disparada: {task.id} para usuário {user.id}')
+            task = process_incoming_message.delay(
+                str(user.id),
+                text or "",
+                image_url=image_url,
+                audio_url=audio_url
+            )
+            logger.info(f'[WEBHOOK] Task disparada: {task.id} para usuário {user.id} (tipo: {media_type})')
         except Exception as e:
             logger.error(f'[WEBHOOK] Erro ao disparar task: {str(e)}')
             # Não retorna erro - apenas loga, para não travar Evolution API
@@ -234,6 +283,71 @@ def handle_button_response(selected_button_id: str, user: User) -> Response:
                     f'Valor: R$ {transaction.amount}, Competência: {transaction.competence_date}'
                 )
                 
+                # APRENDIZADO AUTOMÁTICO: Cria/atualiza LearnedRule se fornecedor existir
+                # Se a subcategoria confirmada pelo usuário for diferente da sugerida inicialmente,
+                # ou se houver fornecedor, cria/atualiza uma regra aprendida
+                try:
+                    from core.models.finance import LearnedRule
+                    extracted_data = parsing_session.extracted_json
+                    fornecedor = extracted_data.get('fornecedor') or transaction.supplier
+                    
+                    # Subcategoria sugerida inicialmente pela IA
+                    subcategoria_sugerida_inicial = extracted_data.get('subcategoria_sugerida', '')
+                    
+                    # Subcategoria confirmada (final)
+                    subcategoria_confirmada = transaction.subcategory.name
+                    
+                    # Se houver fornecedor e a subcategoria confirmada for diferente da sugerida inicialmente,
+                    # cria/atualiza LearnedRule para aprender com o feedback do usuário
+                    if fornecedor and fornecedor.strip():
+                        keyword = fornecedor.strip().lower()
+                        
+                        # Busca regra existente para este fornecedor
+                        learned_rule, created = LearnedRule.objects.get_or_create(
+                            tenant=user.tenant,
+                            keyword=keyword,
+                            defaults={
+                                'category': transaction.category,
+                                'subcategory': transaction.subcategory,
+                                'active': True,
+                                'hit_count': 0
+                            }
+                        )
+                        
+                        if not created:
+                            # Regra já existia - atualiza categoria/subcategoria e incrementa hit_count
+                            learned_rule.category = transaction.category
+                            learned_rule.subcategory = transaction.subcategory
+                            learned_rule.hit_count += 1
+                            learned_rule.active = True
+                            learned_rule.save()
+                            logger.info(
+                                f'[APRENDIZADO] LearnedRule atualizada para "{keyword}": '
+                                f'{transaction.category.name} -> {transaction.subcategory.name} '
+                                f'(hit_count: {learned_rule.hit_count})'
+                            )
+                        else:
+                            # Nova regra criada
+                            learned_rule.hit_count = 1
+                            learned_rule.save()
+                            logger.info(
+                                f'[APRENDIZADO] Nova LearnedRule criada para "{keyword}": '
+                                f'{transaction.category.name} -> {transaction.subcategory.name}'
+                            )
+                        
+                        # Se a subcategoria confirmada for diferente da sugerida inicialmente,
+                        # isso indica que o usuário corrigiu a categorização
+                        if subcategoria_sugerida_inicial and subcategoria_confirmada != subcategoria_sugerida_inicial:
+                            logger.info(
+                                f'[APRENDIZADO] Usuário corrigiu categorização: '
+                                f'Sugerida: {subcategoria_sugerida_inicial} -> '
+                                f'Confirmada: {subcategoria_confirmada}. '
+                                f'Regra aprendida para "{keyword}".'
+                            )
+                except Exception as e:
+                    logger.error(f'[APRENDIZADO] Erro ao criar/atualizar LearnedRule: {str(e)}')
+                    # Não interrompe o fluxo - apenas loga o erro
+                
                 # Envia mensagem de sucesso com detalhes
                 valor_str = f"R$ {transaction.amount:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
                 success_message = f"""✅ *Lançamento de {valor_str} confirmado com sucesso!* 🚀
@@ -244,6 +358,7 @@ def handle_button_response(selected_button_id: str, user: User) -> Response:
 
 Transação registrada no sistema."""
                 
+                whatsapp_service = WhatsAppService()
                 whatsapp_service.send_text_message(user.whatsapp_number, success_message)
                 
             elif action == 'cancel':

@@ -1,24 +1,32 @@
 """
 Service de Inteligência Artificial para parsing de mensagens financeiras.
 
-Utiliza OpenAI GPT-4o-mini para extrair informações estruturadas de mensagens
-de texto recebidas via WhatsApp, seguindo regras contábeis específicas.
+Utiliza OpenAI GPT-4o-mini (multimodal) para extrair informações estruturadas de:
+- Mensagens de texto recebidas via WhatsApp
+- Imagens de comprovantes, notas fiscais e recibos (OCR nativo)
+- Transcrição de áudio usando Whisper API
 
 Características:
 - Extração automática de valores, datas, categorias e descrições
 - Regra de retroação de competência para contas de consumo
 - Vínculo semântico com o Glossário de Despesas
+- Aprendizado através de LearnedRules (regras aprendidas)
 - Output estruturado em JSON
 """
 
 import json
 import logging
-from typing import Dict, List, Optional
+import base64
+import requests
+from typing import Dict, List, Optional, Union
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, date
+from io import BytesIO
+from pathlib import Path
 
 import openai
 from django.conf import settings
+from django.core.files import File
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +55,25 @@ class IAProcessor:
     def parse_financial_message(
         self,
         text: str,
-        context_categories: List[Dict[str, str]]
+        context_categories: List[Dict[str, str]],
+        image_url: Optional[str] = None,
+        image_base64: Optional[str] = None,
+        learned_rules: Optional[List[Dict[str, str]]] = None
     ) -> Dict:
         """
-        Processa uma mensagem de texto e extrai informações financeiras estruturadas.
+        Processa uma mensagem de texto, imagem ou áudio e extrai informações financeiras estruturadas.
         
-        Utiliza GPT-4o-mini para analisar o texto e extrair:
+        Utiliza GPT-4o-mini (multimodal) para analisar:
+        - Texto: Mensagem de texto do WhatsApp
+        - Imagem: Comprovantes, notas fiscais, recibos (OCR nativo via visão computacional)
+        - Áudio: Transcrição automática com Whisper (chamado antes deste método)
+        
+        Extrai:
         - Valor monetário
         - Descrição da transação
         - Data de caixa (quando houve movimentação)
         - Data de competência (fato gerador - com regra de retroação)
-        - Categoria e subcategoria sugeridas baseadas no Glossário
+        - Categoria e subcategoria sugeridas baseadas no Glossário e LearnedRules
         
         Regra de Retroação (Regime de Competência):
         - Se for conta de consumo (Luz, Água, Internet, Aluguel, Sindicato),
@@ -65,9 +81,13 @@ class IAProcessor:
         - Isso reflete o fato gerador do consumo do mês anterior.
         
         Args:
-            text: Texto da mensagem recebida (ex: "Paguei R$ 500 de luz hoje")
+            text: Texto da mensagem recebida ou transcrito de áudio (ex: "Paguei R$ 500 de luz hoje")
             context_categories: Lista de categorias/subcategorias do Glossário disponíveis
                                Formato: [{'category': 'Despesa Fixa', 'subcategory': 'Contas de consumo'}, ...]
+            image_url: URL da imagem (opcional) - para OCR de comprovantes/notas fiscais
+            image_base64: Imagem em base64 (opcional) - alternativa ao image_url
+            learned_rules: Lista de regras aprendidas do tenant (opcional)
+                          Formato: [{'keyword': 'Copel', 'category': 'Despesa Fixa', 'subcategory': 'Contas de consumo'}, ...]
         
         Returns:
             Dict com os dados extraídos:
@@ -79,7 +99,10 @@ class IAProcessor:
                 'categoria_sugerida': str,
                 'subcategoria_sugerida': str,
                 'fornecedor': str (opcional),
-                'confianca': float (0.0 a 1.0)
+                'confianca': float (0.0 a 1.0),
+                'pagamento_realizado': bool,
+                'valor_pago': float (opcional),
+                'aviso_categoria': str (opcional)
             }
         
         Raises:
@@ -93,25 +116,68 @@ class IAProcessor:
             # Prepara o contexto de categorias para a IA
             categories_context = self._format_categories_context(context_categories)
             
-            # System Prompt: Define o papel e as regras para a IA
-            system_prompt = self._build_system_prompt(categories_context)
+            # Prepara dicas de regras aprendidas (se houver)
+            learned_rules_hint = self._format_learned_rules_hint(learned_rules) if learned_rules else None
             
-            # User Prompt: A mensagem do usuário a ser analisada
-            user_prompt = f"""Analise a seguinte mensagem sobre um gasto ou receita financeira:
+            # System Prompt: Define o papel e as regras para a IA
+            system_prompt = self._build_system_prompt(categories_context, learned_rules_hint)
+            
+            # Prepara mensagem do usuário (texto + imagem se houver)
+            user_content = []
+            
+            # Adiciona imagem se fornecida (base64 ou URL)
+            image_data = None
+            if image_base64:
+                # Remove prefixo data:image/...;base64, se houver
+                if ',' in image_base64:
+                    image_base64 = image_base64.split(',', 1)[1]
+                image_data = {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                }
+            elif image_url:
+                image_data = {
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                }
+            
+            # Constrói conteúdo da mensagem
+            if image_data:
+                # Mensagem multimodal (texto + imagem)
+                user_content = [
+                    {
+                        "type": "text",
+                        "text": f"""Analise a seguinte mensagem e imagem sobre um gasto ou receita financeira:
+
+Mensagem: "{text}"
+
+Se a imagem for um comprovante de PIX, nota fiscal ou recibo, extraia todas as informações visíveis (valor, fornecedor, data, etc.).
+
+Extraia todas as informações financeiras relevantes seguindo as regras contábeis especificadas."""
+                    },
+                    image_data
+                ]
+                logger.info(f'Enviando mensagem MULTIMODAL (texto + imagem) para OpenAI: {text[:50]}...')
+            else:
+                # Mensagem apenas texto
+                user_content = f"""Analise a seguinte mensagem sobre um gasto ou receita financeira:
 
 "{text}"
 
 Extraia todas as informações financeiras relevantes seguindo as regras contábeis especificadas."""
+                logger.info(f'Enviando mensagem TEXTO para OpenAI: {text[:50]}...')
             
-            logger.info(f'Enviando mensagem para OpenAI: {text[:50]}...')
+            # Chama a API da OpenAI (multimodal se houver imagem)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ]
             
-            # Chama a API da OpenAI
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=0.3,  # Baixa temperatura para respostas mais determinísticas
                 response_format={"type": "json_object"}  # Força resposta JSON estruturada
             )
@@ -152,21 +218,98 @@ Extraia todas as informações financeiras relevantes seguindo as regras contáb
                 'Por favor, tente novamente ou entre em contato com o suporte.'
             )
     
-    def _build_system_prompt(self, categories_context: str) -> str:
+    def transcribe_audio(self, audio_url: str) -> str:
+        """
+        Transcreve áudio (mensagem de voz) usando Whisper API.
+        
+        Baixa o áudio da URL fornecida e envia para a API do Whisper
+        para transcrever em texto.
+        
+        Args:
+            audio_url: URL do arquivo de áudio (fornecido pela Evolution API)
+            
+        Returns:
+            String com o texto transcrito do áudio
+            
+        Raises:
+            ValueError: Se houver erro ao baixar ou transcrever o áudio
+        """
+        if not self.client:
+            raise ValueError('Cliente OpenAI não configurado. Verifique OPENAI_API_KEY no .env')
+        
+        try:
+            logger.info(f'Baixando áudio de: {audio_url}')
+            
+            # Baixa o áudio da URL
+            response = requests.get(audio_url, timeout=30)
+            response.raise_for_status()
+            
+            # Cria arquivo temporário em memória
+            audio_file = BytesIO(response.content)
+            audio_file.name = "audio.ogg"  # Evolution API geralmente envia .ogg
+            
+            logger.info(f'Áudio baixado ({len(response.content)} bytes). Transcrevendo com Whisper...')
+            
+            # Transcreve usando Whisper API
+            transcript = self.client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="pt",  # Português brasileiro
+                response_format="text"
+            )
+            
+            text = transcript.strip() if isinstance(transcript, str) else str(transcript).strip()
+            
+            logger.info(f'Transcrição concluída: {text[:100]}...')
+            
+            return text
+            
+        except requests.RequestException as e:
+            logger.error(f'Erro ao baixar áudio: {str(e)}')
+            raise ValueError(f'Erro ao baixar áudio da URL: {str(e)}')
+        
+        except openai.APIError as e:
+            logger.error(f'Erro na API do Whisper: {str(e)}')
+            raise ValueError(f'Erro ao transcrever áudio com Whisper: {str(e)}')
+        
+        except Exception as e:
+            logger.error(f'Erro inesperado ao transcrever áudio: {str(e)}')
+            raise ValueError(f'Erro inesperado ao transcrever áudio: {str(e)}')
+    
+    def _build_system_prompt(self, categories_context: str, learned_rules_hint: Optional[str] = None) -> str:
         """
         Constrói o System Prompt com todas as regras contábeis e instruções.
         
+        Se houver learned_rules_hint, inclui como "DICA PRIORITÁRIA" para
+        forçar categorização baseada em confirmações anteriores do usuário.
+        
         Args:
             categories_context: String formatada com as categorias disponíveis
+            learned_rules_hint: String formatada com regras aprendidas (opcional)
             
         Returns:
             System prompt completo em português
         """
+        # Prepara seção de dicas prioritárias (LearnedRules)
+        learned_rules_section = ""
+        if learned_rules_hint:
+            learned_rules_section = f"""
+📌 DICAS PRIORITÁRIAS (Regras Aprendidas do Usuário):
+Estas são associações que o usuário já confirmou anteriormente. 
+SEMPRE use estas categorias quando o fornecedor ou palavra-chave corresponder:
+
+{learned_rules_hint}
+
+IMPORTANTE: Se encontrar correspondência nas Dicas Prioritárias acima, 
+USE OBRIGATORIAMENTE a categoria/subcategoria sugerida (confianca = 1.0).
+"""
+        
         return f"""Você é um contador especializado em restaurantes e empresas B2B, com expertise em 
 regime de competência e fluxo de caixa.
 
-Sua tarefa é extrair informações financeiras de mensagens textuais sobre gastos ou receitas, 
-seguindo rigorosamente as regras contábeis abaixo:
+Sua tarefa é extrair informações financeiras de mensagens textuais, imagens (comprovantes/notas fiscais) 
+ou transcrições de áudio sobre gastos ou receitas, seguindo rigorosamente as regras contábeis abaixo:
+{learned_rules_section}
 
 REGRAS DE EXTRAÇÃO:
 
@@ -196,12 +339,18 @@ REGRAS DE EXTRAÇÃO:
    - Formato obrigatório: YYYY-MM-DD (use o dia 01 do mês para contas de consumo)
 
 5. CATEGORIZAÇÃO:
-   - Use EXCLUSIVAMENTE as categorias e subcategorias fornecidas abaixo
-   - Compare a descrição com as subcategorias disponíveis
+   - PRIORIDADE 1: Se houver "Dicas Prioritárias" acima e o fornecedor/palavra-chave corresponder, USE OBRIGATORIAMENTE
+   - PRIORIDADE 2: Use EXCLUSIVAMENTE as categorias e subcategorias fornecidas abaixo
+   - Compare a descrição e/ou fornecedor com as subcategorias disponíveis
    - Escolha a categoria e subcategoria que melhor se encaixam semanticamente
    - Se não houver correspondência exata, escolha a mais próxima
    - IMPORTANTE: Se não tiver 100% de certeza da subcategoria, reduza o valor de "confianca" para abaixo de 0.8
    - Se confianca < 0.8, adicione um campo "aviso_categoria" no JSON explicando a incerteza
+   - Se estiver processando uma IMAGEM (comprovante/nota fiscal), extraia informações visíveis como:
+     * Valor total do documento
+     * Nome do fornecedor/prestador
+     * Data do documento
+     * Descrição dos itens (se visível)
 
 CATEGORIAS DISPONÍVEIS:
 {categories_context}
@@ -247,6 +396,33 @@ IMPORTANTE:
 - Se não tiver 100% de certeza da subcategoria, reduza "confianca" para < 0.8 e adicione "aviso_categoria"
 - Se o pagamento já foi realizado, defina pagamento_realizado como true
 - Se houver multas/juros (valor pago > valor original), inclua em valor_pago"""
+    
+    def _format_learned_rules_hint(self, learned_rules: List[Dict[str, str]]) -> str:
+        """
+        Formata regras aprendidas para inclusão no prompt como dica prioritária.
+        
+        Args:
+            learned_rules: Lista de dicionários com keyword, category e subcategory
+                          Formato: [{'keyword': 'Copel', 'category': 'Despesa Fixa', 'subcategory': 'Contas de consumo'}, ...]
+            
+        Returns:
+            String formatada com todas as regras aprendidas
+        """
+        if not learned_rules:
+            return ""
+        
+        formatted = []
+        for rule in learned_rules:
+            keyword = rule.get('keyword', '')
+            category = rule.get('category', '')
+            subcategory = rule.get('subcategory', '')
+            if keyword and category and subcategory:
+                formatted.append(f"  - Se fornecedor/palavra-chave contiver '{keyword}' -> Categoria: '{category}', Subcategoria: '{subcategory}'")
+        
+        if not formatted:
+            return ""
+        
+        return "\n".join(formatted)
     
     def _format_categories_context(self, context_categories: List[Dict[str, str]]) -> str:
         """
