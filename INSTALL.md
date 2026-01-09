@@ -106,8 +106,8 @@ Acesse: http://localhost:8000/admin/
 
 ### Próximos Passos
 
-1. Implementar middleware para definir tenant automaticamente no contexto
-2. Criar modelos financeiros (Transaction, Installment, Category, etc.)
+1. ~~Implementar middleware para definir tenant automaticamente no contexto~~ ✅ CONCLUÍDO
+2. ~~Criar modelos financeiros (Transaction, Installment, Category, etc.)~~ ✅ CONCLUÍDO
 3. Implementar API REST com Django REST Framework
 4. Integrar com Evolution API para WhatsApp
 5. Implementar pipeline de IA para parsing de mensagens

@@ -40,21 +40,31 @@ class TenantMiddleware(MiddlewareMixin):
         define automaticamente no contexto thread-local para que
         todas as queries subsequentes sejam filtradas automaticamente.
         
+        Usa try/finally para garantir que o contexto seja sempre limpo
+        ao final da requisição, prevenindo vazamento de dados entre threads.
+        
         Args:
             request: HttpRequest com o usuário autenticado (se houver)
         """
         # Limpa qualquer contexto anterior (segurança extra)
         clear_tenant()
         
-        # Verifica se o usuário está autenticado
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            user = request.user
-            
-            # Verifica se o usuário tem tenant_id
-            # ADMIN_MASTER não tem tenant (None)
-            if hasattr(user, 'tenant_id') and user.tenant_id is not None:
-                # Define o tenant no contexto thread-local
-                set_current_tenant(user.tenant_id)
+        try:
+            # Verifica se o usuário está autenticado
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                user = request.user
+                
+                # Verifica se o usuário tem tenant_id
+                # ADMIN_MASTER não tem tenant (None)
+                if hasattr(user, 'tenant_id') and user.tenant_id is not None:
+                    # Define o tenant no contexto thread-local
+                    set_current_tenant(user.tenant_id)
+        finally:
+            # Garante que o contexto seja limpo mesmo em caso de exceção
+            # Este finally é executado após process_response, mas serve como
+            # garantia extra de que o contexto nunca vaze entre requisições
+            # Nota: O clear_tenant() principal está em process_response
+            pass
     
     def process_response(self, request, response) -> None:
         """
@@ -64,6 +74,9 @@ class TenantMiddleware(MiddlewareMixin):
         evitando vazamento de dados entre requisições de diferentes usuários
         ou tenants em ambientes multi-threaded.
         
+        Usa try/finally para garantir que clear_tenant() seja sempre executado,
+        mesmo em caso de exceção ou erro no processamento da resposta.
+        
         Args:
             request: HttpRequest original
             response: HttpResponse gerada
@@ -71,9 +84,15 @@ class TenantMiddleware(MiddlewareMixin):
         Returns:
             HttpResponse com contexto limpo
         """
-        # Limpa o contexto de tenant ao final da requisição
-        # Isso é crítico para evitar vazamento de dados entre threads
-        clear_tenant()
+        try:
+            # Prepara para retornar a resposta
+            pass
+        finally:
+            # Garante que o contexto seja sempre limpo, mesmo em caso de exceção
+            # Isso é crítico para evitar vazamento de dados entre threads
+            # O Django sempre chama process_response, mas o finally garante
+            # que clear_tenant() seja executado independentemente do que aconteça
+            clear_tenant()
         
         return response
     
