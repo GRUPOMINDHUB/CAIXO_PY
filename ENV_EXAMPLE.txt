@@ -1,0 +1,25 @@
+# Configurações do Django
+SECRET_KEY=sua-chave-secreta-aqui-gerar-com-django-admin-generate-secret-key
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+# Banco de Dados PostgreSQL
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/caixo_db
+DB_NAME=caixo_db
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=localhost
+DB_PORT=5432
+
+# Configurações de Email (futuro)
+# EMAIL_HOST=smtp.gmail.com
+# EMAIL_PORT=587
+# EMAIL_USE_TLS=True
+# EMAIL_HOST_USER=
+# EMAIL_HOST_PASSWORD=
+
+# APIs Externas (futuro)
+# OPENAI_API_KEY=
+# EVOLUTION_API_URL=
+# EVOLUTION_API_KEY=
+

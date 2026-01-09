@@ -1,0 +1,19 @@
+# Django e Core
+Django>=5.0,<6.0
+djangorestframework>=3.14.0
+django-cors-headers>=4.3.0
+psycopg2-binary>=2.9.9
+
+# Variáveis de Ambiente
+python-dotenv>=1.0.0
+
+# Utilitários
+python-dateutil>=2.8.2
+
+# Processamento Assíncrono (futuro)
+# celery>=5.3.0
+# redis>=5.0.0
+
+# Validação e Segurança
+django-extensions>=3.2.3
+
