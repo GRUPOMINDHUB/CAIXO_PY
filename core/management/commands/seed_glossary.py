@@ -48,6 +48,7 @@ class Command(BaseCommand):
                 'Dedetização',
                 'Pro Labore',
                 'Taxas e Licenças',
+                'Testes cozinha',
             ]
         },
         # Despesa Variável
@@ -60,6 +61,7 @@ class Command(BaseCommand):
                 'Devolução e cancelamentos',
                 'Impostos',
                 'Despesas Bancárias',
+                'Taxas de máquinas de cartão',
                 'Deslocamentos',
                 'Logística',
                 'Material de escritório',

@@ -439,6 +439,50 @@ class Installment(TenantModel):
         today = timezone.now().date()
         return today > self.due_date
     
+    def mark_as_paid(self, payment_date: date, paid_amount: Optional[Decimal] = None) -> None:
+        """
+        Marca a parcela como paga, calculando automaticamente multas/juros se necessário.
+        
+        Se o valor pago for maior que o valor líquido da parcela, a diferença
+        é automaticamente atribuída como penalty_amount (multas/juros).
+        
+        Args:
+            payment_date: Data em que o pagamento foi efetuado
+            paid_amount: Valor total pago (se None, usa o amount original)
+            
+        Raises:
+            ValidationError: Se payment_date for inválida ou paid_amount for negativo
+        """
+        if payment_date is None:
+            raise ValidationError('Data de pagamento é obrigatória.')
+        
+        if paid_amount is not None and paid_amount < Decimal('0.00'):
+            raise ValidationError('Valor pago não pode ser negativo.')
+        
+        # Define a data de pagamento
+        self.payment_date = payment_date
+        
+        # Se foi informado um valor pago, calcula a diferença como multa/juros
+        if paid_amount is not None:
+            if paid_amount >= self.amount:
+                # Se pagou mais que o valor líquido, a diferença é multa/juros
+                self.penalty_amount = paid_amount - self.amount
+            else:
+                # Se pagou menos, ajusta o amount (pode ser desconto negociado)
+                self.amount = paid_amount
+                self.penalty_amount = Decimal('0.00')
+        else:
+            # Se não foi informado valor, usa o amount original
+            # e mantém penalty_amount como está (ou zero se não foi definido)
+            if self.penalty_amount is None:
+                self.penalty_amount = Decimal('0.00')
+        
+        # Marca como pago
+        self.status = InstallmentStatus.PAGO
+        
+        # Salva as alterações
+        self.save()
+    
     @property
     def total_amount(self) -> Decimal:
         """
@@ -455,6 +499,13 @@ class Installment(TenantModel):
         return f"{status_icon} {self.transaction.description} - R$ {self.amount} (Venc: {self.due_date.strftime('%d/%m/%Y')})"
 
 
+class ParsingSessionStatus(models.TextChoices):
+    """Status da sessão de parsing."""
+    PENDING = 'PENDING', 'Pendente'
+    CONFIRMED = 'CONFIRMED', 'Confirmado'
+    CANCELED = 'CANCELED', 'Cancelado'
+
+
 class ParsingSession(TenantModel):
     """
     Sessão temporária de parsing pela IA.
@@ -466,8 +517,8 @@ class ParsingSession(TenantModel):
     Características:
     - raw_text: Texto original recebido (via WhatsApp)
     - extracted_json: JSON extraído pela IA com os dados estruturados
+    - status: Status da sessão (PENDING, CONFIRMED, CANCELED)
     - expires_at: Data de expiração da sessão (limpeza automática)
-    - confirmed: Flag indicando se foi confirmado pelo usuário
     """
     
     raw_text = models.TextField(
@@ -480,15 +531,17 @@ class ParsingSession(TenantModel):
         help_text='Dados estruturados extraídos pela IA (formato JSON)'
     )
     
+    status = models.CharField(
+        max_length=10,
+        choices=ParsingSessionStatus.choices,
+        default=ParsingSessionStatus.PENDING,
+        verbose_name='Status',
+        help_text='Status atual da sessão de parsing'
+    )
+    
     expires_at = models.DateTimeField(
         verbose_name='Expira em',
         help_text='Data e hora de expiração desta sessão (para limpeza automática)'
-    )
-    
-    confirmed = models.BooleanField(
-        default=False,
-        verbose_name='Confirmado',
-        help_text='Indica se a sessão foi confirmada pelo usuário'
     )
     
     confirmed_transaction = models.ForeignKey(
@@ -507,14 +560,42 @@ class ParsingSession(TenantModel):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['tenant', '-created_at']),
-            models.Index(fields=['tenant', 'confirmed']),
+            models.Index(fields=['tenant', 'status']),
             models.Index(fields=['expires_at']),
         ]
     
+    def confirm(self, transaction: Transaction) -> None:
+        """
+        Confirma a sessão e vincula à transação criada.
+        
+        Args:
+            transaction: Instância da Transaction criada após confirmação
+        """
+        self.status = ParsingSessionStatus.CONFIRMED
+        self.confirmed_transaction = transaction
+        self.save()
+    
+    def cancel(self) -> None:
+        """
+        Cancela a sessão de parsing.
+        """
+        self.status = ParsingSessionStatus.CANCELED
+        self.save()
+    
+    @property
+    def is_confirmed(self) -> bool:
+        """
+        Verifica se a sessão foi confirmada.
+        
+        Returns:
+            True se o status for CONFIRMED, False caso contrário
+        """
+        return self.status == ParsingSessionStatus.CONFIRMED
+    
     def __str__(self) -> str:
         """Representação string da sessão."""
-        status = "✓ Confirmado" if self.confirmed else "⏳ Pendente"
-        return f"Sessão {self.id} - {status} ({self.created_at.strftime('%d/%m/%Y %H:%M')})"
+        status_display = self.get_status_display()
+        return f"Sessão {self.id} - {status_display} ({self.created_at.strftime('%d/%m/%Y %H:%M')})"
 
 
 class LearnedRule(TenantModel):

@@ -10,13 +10,13 @@ from core.models.base import TenantModel
 from core.models.finance import (
     Category, Subcategory, Transaction, Installment,
     ParsingSession, LearnedRule,
-    CategoryType, InstallmentStatus
+    CategoryType, InstallmentStatus, ParsingSessionStatus
 )
 
 __all__ = [
     'Tenant', 'User', 'TenantModel',
     'Category', 'Subcategory', 'Transaction', 'Installment',
     'ParsingSession', 'LearnedRule',
-    'CategoryType', 'InstallmentStatus'
+    'CategoryType', 'InstallmentStatus', 'ParsingSessionStatus'
 ]
 

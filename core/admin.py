@@ -430,8 +430,8 @@ class InstallmentAdmin(TenantAdminMixin, admin.ModelAdmin):
 class ParsingSessionAdmin(TenantAdminMixin, admin.ModelAdmin):
     """Admin customizado para o modelo ParsingSession."""
     
-    list_display = ['id', 'confirmed', 'expires_at', 'confirmed_transaction', 'created_at']
-    list_filter = ['confirmed', 'expires_at', 'created_at']
+    list_display = ['id', 'status', 'expires_at', 'confirmed_transaction', 'created_at']
+    list_filter = ['status', 'expires_at', 'created_at']
     search_fields = ['raw_text']
     readonly_fields = ['id', 'created_at', 'updated_at']
     date_hierarchy = 'created_at'
@@ -441,7 +441,7 @@ class ParsingSessionAdmin(TenantAdminMixin, admin.ModelAdmin):
             'fields': ('id', 'raw_text', 'extracted_json')
         }),
         ('Status', {
-            'fields': ('confirmed', 'confirmed_transaction', 'expires_at')
+            'fields': ('status', 'confirmed_transaction', 'expires_at')
         }),
         ('Metadados', {
             'fields': ('created_at', 'updated_at'),
