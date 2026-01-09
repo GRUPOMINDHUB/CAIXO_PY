@@ -74,19 +74,31 @@ WSGI_APPLICATION = 'caixo.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/caixo_db')
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'caixo_db'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-        'OPTIONS': {
-            'connect_timeout': 10,
-        },
+# Usa SQLite temporariamente para desenvolvimento rápido
+# Para produção, configure PostgreSQL nas variáveis de ambiente
+USE_SQLITE = os.getenv('USE_SQLITE', 'True') == 'True'
+
+if USE_SQLITE:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'caixo_db'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {
+                'connect_timeout': 10,
+            },
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -124,12 +136,23 @@ STATICFILES_DIRS = [
 ]
 
 # Media files
+# Estrutura de pastas de mídia organizada por Tenant ID:
+# media/
+#   ├── tenants/
+#   │   ├── {tenant_id}/
+#   │   │   ├── transactions/     # Comprovantes e documentos de transações
+#   │   │   ├── invoices/          # Notas fiscais e recibos
+#   │   │   └── uploads/           # Outros uploads do tenant
+#   │   └── ...
+#   └── temp/                      # Arquivos temporários
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
-DEFAULT_AUTO_FIELD = 'django.db.models.UUIDField'
+# Nota: Modelos do Caixô usam UUIDField explicitamente, então este valor
+# será usado apenas para modelos que não especificam pk (não deve acontecer)
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Django REST Framework
 REST_FRAMEWORK = {
