@@ -9,6 +9,7 @@ python-dotenv>=1.0.0
 
 # Utilitários
 python-dateutil>=2.8.2
+Pillow>=10.0.0
 
 # Processamento Assíncrono
 celery>=5.3.0
@@ -22,4 +23,7 @@ requests>=2.31.0
 
 # Validação e Segurança
 django-extensions>=3.2.3
+
+# Dados Externos (Clima, Feriados, etc.)
+holidays>=0.37
 

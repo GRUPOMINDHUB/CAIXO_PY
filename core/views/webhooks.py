@@ -350,9 +350,10 @@ def handle_button_response(selected_button_id: str, user: User) -> Response:
                 
                 # Envia mensagem de sucesso com detalhes
                 valor_str = f"R$ {transaction.amount:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                descricao = transaction.description or "Sem descrição"
                 success_message = f"""✅ *Lançamento de {valor_str} confirmado com sucesso!* 🚀
 
-📝 {transaction.description}
+📝 {descricao}
 📊 Competência: {transaction.competence_date.strftime('%m/%Y')}
 🏷️ {transaction.category.name} - {transaction.subcategory.name}
 
@@ -533,7 +534,9 @@ def create_transaction_from_session(parsing_session: ParsingSession, user: User)
     
     # Busca subcategoria
     try:
+        # Busca subcategoria APENAS do tenant (com isolamento multi-tenant)
         subcategory = Subcategory.objects.filter(
+            tenant=tenant,
             name=subcategory_name,
             category=category,
             tenant__isnull=True
@@ -588,9 +591,10 @@ def create_transaction_from_session(parsing_session: ParsingSession, user: User)
             supplier=fornecedor if fornecedor else None  # None em vez de string vazia
         )
         
+        descricao = transaction.description or "Sem descrição"
         logger.info(
             f'[PERSISTÊNCIA] Transaction {transaction.id} criada: '
-            f'R$ {valor} - {transaction.description} - Competência: {data_competencia}'
+            f'R$ {valor} - {descricao} - Competência: {data_competencia}'
         )
         
         # Cria Installment (Caixa - Movimentação Real para Fluxo de Caixa)

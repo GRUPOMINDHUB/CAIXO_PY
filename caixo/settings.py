@@ -121,6 +121,11 @@ AUTH_PASSWORD_VALIDATORS = [
 # Custom User Model
 AUTH_USER_MODEL = 'core.User'
 
+# Configurações de Autenticação
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/login/'
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 LANGUAGE_CODE = 'pt-br'
@@ -222,6 +227,20 @@ LOGGING = {
             'propagate': False,
         },
     },
+}
+
+# Cache Configuration
+# Usa cache em memória local para desenvolvimento
+# Em produção, configure Redis ou outro backend de cache
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'TIMEOUT': 3600,  # 1 hora por padrão
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
 }
 
 # Celery Configuration

@@ -9,8 +9,8 @@ from core.models.user import User
 from core.models.base import TenantModel
 from core.models.finance import (
     Category, Subcategory, Transaction, Installment,
-    ParsingSession, LearnedRule,
-    CategoryType, InstallmentStatus, ParsingSessionStatus
+    ParsingSession, LearnedRule, SalesChannel,
+    CategoryType, InstallmentStatus, ParsingSessionStatus, TransactionType
 )
 
 __all__ = [

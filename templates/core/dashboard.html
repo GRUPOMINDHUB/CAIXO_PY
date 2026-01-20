@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% load currency %}
+
+{% block title %}Dashboard - Caixô{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Garante que texto dos botões selecionados seja preto mesmo no dark mode */
+    .dark a[style*="background-color: #D4AF37"],
+    .dark a[style*="background-color:#D4AF37"],
+    .dark button[style*="background-color: #D4AF37"],
+    .dark button[style*="background-color:#D4AF37"] {
+        color: #000000 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Cabeçalho com Filtro de Período -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB; border-top: 3px solid #D4AF37;">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold mb-2" style="color: #2D2926;">Dashboard Financeiro</h1>
+                <p class="text-sm" style="color: #706B63;">
+                    {% if period_filter == 'custom' and date_start and date_end %}
+                        Período: {{ date_start|date:"d/m/Y" }} a {{ date_end|date:"d/m/Y" }}
+                    {% elif period_filter == 'current_month' %}
+                        Visão geral dos indicadores financeiros - {{ today|date:"F Y" }}
+                    {% elif period_filter == '30_days' %}
+                        Últimos 30 dias
+                    {% elif period_filter == '90_days' %}
+                        Últimos 90 dias
+                    {% elif period_filter == '6_months' %}
+                        Últimos 6 meses
+                    {% elif period_filter == '12_months' %}
+                        Últimos 12 meses
+                    {% else %}
+                        Visão geral dos indicadores financeiros - {{ today|date:"F Y" }}
+                    {% endif %}
+                </p>
+            </div>
+            
+            <!-- Filtro de Período -->
+            <div class="flex flex-wrap gap-2">
+                <!-- Botões Rápidos -->
+                <a href="?period=current_month" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition {% if period_filter == 'current_month' %}{% else %}hover:opacity-90{% endif %}"
+                   style="{% if period_filter == 'current_month' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    Mês Atual
+                </a>
+                <a href="?period=30_days" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition {% if period_filter == '30_days' %}{% else %}hover:opacity-90{% endif %}"
+                   style="{% if period_filter == '30_days' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    30 Dias
+                </a>
+                <a href="?period=90_days" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition {% if period_filter == '90_days' %}{% else %}hover:opacity-90{% endif %}"
+                   style="{% if period_filter == '90_days' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    90 Dias
+                </a>
+                <a href="?period=6_months" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition {% if period_filter == '6_months' %}{% else %}hover:opacity-90{% endif %}"
+                   style="{% if period_filter == '6_months' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    6 Meses
+                </a>
+                <a href="?period=12_months" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition {% if period_filter == '12_months' %}{% else %}hover:opacity-90{% endif %}"
+                   style="{% if period_filter == '12_months' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    12 Meses
+                </a>
+                <button onclick="openCustomPeriodModal()" 
+                        class="px-4 py-2 rounded-lg text-sm font-medium transition hover:opacity-90"
+                        style="{% if period_filter == 'custom' %}background-color: #D4AF37; color: #000000;{% else %}background-color: #FDFCF9; border: 1px solid #E9E4DB; color: #2D2926;{% endif %}">
+                    Personalizado
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Período Personalizado -->
+    <div id="customPeriodModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-50">
+        <div class="rounded-lg p-6 max-w-md w-full mx-4" style="background-color: var(--caixo-bg-card); border: 1px solid var(--caixo-border);">
+            <h2 class="text-xl font-bold mb-4" style="color: var(--caixo-text-primary);">Período Personalizado</h2>
+            <form method="get" action="{% url 'dashboard' %}" class="space-y-4">
+                <input type="hidden" name="period" value="custom">
+                
+                <div>
+                    <label for="date_start" class="block text-sm font-medium mb-2" style="color: var(--caixo-text-primary);">Data Inicial</label>
+                    <input type="date" 
+                           id="date_start" 
+                           name="date_start" 
+                           value="{{ date_start|default:'' }}"
+                           required
+                           class="w-full px-4 py-2 rounded-lg outline-none transition"
+                           style="border: 1px solid var(--caixo-border); color: var(--caixo-text-primary); background-color: var(--caixo-bg-card);">
+                </div>
+                
+                <div>
+                    <label for="date_end" class="block text-sm font-medium mb-2" style="color: var(--caixo-text-primary);">Data Final</label>
+                    <input type="date" 
+                           id="date_end" 
+                           name="date_end" 
+                           value="{{ date_end|default:'' }}"
+                           required
+                           class="w-full px-4 py-2 rounded-lg outline-none transition"
+                           style="border: 1px solid var(--caixo-border); color: var(--caixo-text-primary); background-color: var(--caixo-bg-card);">
+                </div>
+                
+                <div class="flex gap-3 justify-end">
+                    <button type="button" 
+                            onclick="closeCustomPeriodModal()"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition hover:opacity-90"
+                            style="background-color: var(--caixo-bg-primary); border: 1px solid var(--caixo-border); color: var(--caixo-text-primary);">
+                        Cancelar
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition hover:opacity-90 btn-action-primary"
+                            style="background-color: #D4AF37; color: #000000;">
+                        Aplicar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Mensagem para Admin Master -->
+    {% if is_admin_master %}
+    <div class="px-4 py-3 rounded-lg mb-4 border" style="background-color: #EBF5FB; border-color: #2980B9; color: #2980B9;">
+        <p class="font-semibold">Você está logado como Admin Master.</p>
+        <p class="text-sm mt-1">Para visualizar dados financeiros, faça login com uma conta de usuário vinculada a um restaurante.</p>
+    </div>
+    {% endif %}
+
+    <!-- Mensagem de Erro -->
+    {% if error %}
+    <div class="px-4 py-3 rounded-lg border" style="background-color: #FDF2F2; border-color: #E67E22; color: #E67E22;">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Cards de Métricas Principais -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <!-- Saldo Atual -->
+        <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium" style="color: #706B63;">Saldo Atual</h3>
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: {% if saldo_atual >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <p class="text-2xl lg:text-3xl font-bold" style="color: {% if saldo_atual >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
+                R$ {{ saldo_atual|currency_br }}
+            </p>
+            <p class="text-xs mt-2" style="color: #706B63;">
+                Entradas: R$ {{ total_entradas|currency_br }} | Saídas: R$ {{ total_saidas|currency_br }}
+            </p>
+        </div>
+
+        <!-- A Pagar Hoje -->
+        <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium" style="color: #706B63;">A Pagar Hoje</h3>
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: {% if a_pagar_hoje > 0 %}#E67E22{% else %}#27AE60{% endif %};">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <p class="text-2xl lg:text-3xl font-bold" style="color: {% if a_pagar_hoje > 0 %}#E67E22{% else %}#27AE60{% endif %};">
+                R$ {{ a_pagar_hoje|currency_br }}
+            </p>
+            <p class="text-xs mt-2" style="color: #706B63;">
+                {% if a_pagar_hoje > 0 %}Contas vencendo hoje{% else %}Nenhuma conta vencendo hoje{% endif %}
+            </p>
+        </div>
+
+        <!-- Faturamento Mensal -->
+        <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium" style="color: #706B63;">Faturamento Mensal</h3>
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #2980B9;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+            </div>
+            <p class="text-2xl lg:text-3xl font-bold" style="color: #2980B9;">
+                R$ {{ faturamento_mensal|currency_br }}
+            </p>
+            <p class="text-xs mt-2" style="color: #706B63;">
+                Receitas do mês (competência)
+            </p>
+        </div>
+
+        <!-- Despesas Mensais -->
+        <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-medium" style="color: #706B63;">Despesas Mensais</h3>
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #E67E22;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                </svg>
+            </div>
+            <p class="text-2xl lg:text-3xl font-bold" style="color: #E67E22;">
+                R$ {{ despesas_mensais|currency_br }}
+            </p>
+            <p class="text-xs mt-2" style="color: #706B63;">
+                Despesas do mês (competência)
+            </p>
+        </div>
+    </div>
+
+    <!-- Status do WhatsApp e Lista de Lançamentos -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Status do WhatsApp -->
+        {% if tenant %}
+        <div class="rounded-lg shadow-sm p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <h2 class="text-lg font-bold mb-4" style="color: #2D2926;">Status WhatsApp</h2>
+            <div class="flex items-center space-x-3">
+                <div class="w-4 h-4 rounded-full" style="background-color: {% if whatsapp_conectado %}#27AE60{% else %}#E67E22{% endif %};"></div>
+                <div>
+                    <p class="font-medium" style="color: #2D2926;">
+                        {% if whatsapp_conectado %}Conectado{% else %}Desconectado{% endif %}
+                    </p>
+                    <p class="text-xs" style="color: #706B63;">
+                        {% if whatsapp_conectado %}
+                            Instância: {{ tenant.evolution_instance_name }}
+                        {% else %}
+                            Configure a instância na Evolution API
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Lista de Lançamentos Recentes -->
+        <div class="lg:col-span-2 rounded-lg shadow-sm p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+            <h2 class="text-lg font-bold mb-4" style="color: #2D2926;">Lançamentos Recentes</h2>
+            
+            {% if lancamentos_recentes %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y" style="border-color: #E9E4DB;">
+                    <thead style="background-color: #FDFCF9;">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase" style="color: #706B63; border-bottom: 1px solid #E9E4DB;">Descrição</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase" style="color: #706B63; border-bottom: 1px solid #E9E4DB;">Categoria</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase" style="color: #706B63; border-bottom: 1px solid #E9E4DB;">Status</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium uppercase" style="color: #706B63; border-bottom: 1px solid #E9E4DB;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y" style="border-color: #E9E4DB;">
+                        {% for installment in lancamentos_recentes %}
+                        <tr class="hover:opacity-80 transition" style="background-color: {% cycle '#FFFFFF' '#FDFCF9' %};">
+                            <td class="px-4 py-3 text-sm" style="color: #2D2926;">
+                                {{ installment.transaction.description|truncatewords:8 }}
+                            </td>
+                            <td class="px-4 py-3 text-sm" style="color: #706B63;">
+                                {{ installment.transaction.category.name }}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if installment.status == 'PAGO' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style="background-color: #D5F4E6; color: #27AE60;">
+                                        Pago
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium badge-caixo-auto" style="background-color: #F5E6D3; color: #D4AF37;">
+                                        Pendente
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right font-semibold" style="color: #2D2926;">
+                                R$ {{ installment.amount|currency_br }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center py-8" style="color: #706B63;">Nenhum lançamento registrado ainda.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function openCustomPeriodModal() {
+        document.getElementById('customPeriodModal').classList.remove('hidden');
+        document.getElementById('customPeriodModal').classList.add('flex');
+    }
+    
+    function closeCustomPeriodModal() {
+        document.getElementById('customPeriodModal').classList.add('hidden');
+        document.getElementById('customPeriodModal').classList.remove('flex');
+    }
+    
+    // Fecha modal ao clicar fora
+    document.getElementById('customPeriodModal')?.addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeCustomPeriodModal();
+        }
+    });
+</script>
+{% endblock %}

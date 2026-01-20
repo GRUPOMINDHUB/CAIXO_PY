@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Deletar Empresa - Caixô{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Cabeçalho -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <h1 class="text-2xl font-bold mb-2" style="color: #2D2926;">Confirmar Exclusão</h1>
+        <p class="text-sm" style="color: #706B63;">Esta ação não pode ser desfeita</p>
+    </div>
+
+    <!-- Aviso -->
+    <div class="rounded-lg p-4 lg:p-6 border" style="background-color: #FDF2F2; border-color: #E67E22;">
+        <div class="flex items-start">
+            <svg class="w-6 h-6 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #E67E22;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+                <h3 class="text-lg font-semibold mb-2" style="color: #E67E22;">Atenção!</h3>
+                <p class="mb-4" style="color: #E67E22;">
+                    Você está prestes a deletar a empresa <strong>{{ tenant.name }}</strong> (CNPJ: {{ tenant.cnpj_formatted }}).
+                </p>
+                <p style="color: #E67E22;">
+                    Esta ação irá remover permanentemente todos os dados relacionados a esta empresa do sistema.
+                    Certifique-se de que não há usuários vinculados antes de prosseguir.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informações da Empresa -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <h2 class="text-lg font-semibold mb-4" style="color: #2D2926;">Informações da Empresa</h2>
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <dt class="text-sm font-medium mb-1" style="color: #706B63;">Razão Social</dt>
+                <dd class="text-sm" style="color: #2D2926;">{{ tenant.name }}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium mb-1" style="color: #706B63;">CNPJ</dt>
+                <dd class="text-sm" style="color: #2D2926;">{{ tenant.cnpj_formatted }}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium mb-1" style="color: #706B63;">Plano</dt>
+                <dd class="text-sm" style="color: #2D2926;">{{ tenant.get_plan_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium mb-1" style="color: #706B63;">Status</dt>
+                <dd class="text-sm" style="color: #2D2926;">{{ tenant.get_status_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium mb-1" style="color: #706B63;">Criado em</dt>
+                <dd class="text-sm" style="color: #2D2926;">{{ tenant.created_at|date:"d/m/Y H:i" }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Formulário de Confirmação -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            
+            <div class="flex items-center space-x-4">
+                <a href="{% url 'tenant_list' %}" 
+                   class="flex-1 px-6 py-2 rounded-lg transition hover:opacity-80 text-center" 
+                   style="border: 1px solid #E9E4DB; color: #706B63; background-color: #FFFFFF;">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="flex-1 px-6 py-2 rounded-lg transition hover:opacity-90"
+                        style="background-color: #E67E22; color: #FFFFFF;"
+                        onmouseover="this.style.backgroundColor='#F39C12'"
+                        onmouseout="this.style.backgroundColor='#E67E22'">
+                    Confirmar Exclusão
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

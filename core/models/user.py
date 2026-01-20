@@ -36,7 +36,7 @@ class UserManager(BaseUserManager):
         self,
         email: str,
         password: Optional[str] = None,
-        tenant: Optional[Tenant] = None,
+        tenants: Optional[list] = None,
         role: str = UserRole.OPERADOR,
         **extra_fields
     ):
@@ -46,7 +46,7 @@ class UserManager(BaseUserManager):
         Args:
             email: Email do usuário (usa como username)
             password: Senha do usuário
-            tenant: Tenant ao qual o usuário pertence (None apenas para ADMIN_MASTER)
+            tenants: Lista de Tenants aos quais o usuário pertence (None apenas para ADMIN_MASTER)
             role: Role do usuário (OPERADOR por padrão)
             **extra_fields: Campos extras
             
@@ -54,7 +54,7 @@ class UserManager(BaseUserManager):
             User criado
             
         Raises:
-            ValidationError: Se tentar criar usuário não-master sem tenant
+            ValidationError: Se tentar criar usuário não-master sem tenants
         """
         if not email:
             raise ValueError('O email é obrigatório')
@@ -62,24 +62,28 @@ class UserManager(BaseUserManager):
         # Normaliza o email
         email = self.normalize_email(email)
         
-        # Valida se usuário não-master tem tenant
-        if role != UserRole.ADMIN_MASTER and not tenant:
-            raise ValidationError('Usuários não-master devem ter um tenant associado.')
+        # Valida se usuário não-master tem tenants
+        if role != UserRole.ADMIN_MASTER and (not tenants or len(tenants) == 0):
+            raise ValidationError('Usuários não-master devem ter pelo menos um tenant associado.')
         
-        # Se for ADMIN_MASTER, tenant deve ser None
-        if role == UserRole.ADMIN_MASTER and tenant:
-            raise ValidationError('Administradores Master não podem ter tenant associado.')
+        # Se for ADMIN_MASTER, tenants deve ser vazio
+        if role == UserRole.ADMIN_MASTER and tenants and len(tenants) > 0:
+            raise ValidationError('Administradores Master não podem ter tenants associados.')
         
         user = self.model(
             email=email,
             username=email,  # Usa email como username
-            tenant=tenant,
             role=role,
             **extra_fields
         )
         
         user.set_password(password)
         user.save(using=self._db)
+        
+        # Adiciona tenants via ManyToMany
+        if tenants:
+            user.tenants.set(tenants)
+        
         return user
     
     def create_superuser(
@@ -103,13 +107,14 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('role', UserRole.ADMIN_MASTER)
         extra_fields.pop('tenant', None)  # Remove tenant se existir
+        extra_fields.pop('tenants', None)  # Remove tenants se existir
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser deve ter is_staff=True.')
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser deve ter is_superuser=True.')
         
-        return self.create_user(email, password, tenant=None, **extra_fields)
+        return self.create_user(email, password, tenants=None, **extra_fields)
 
 
 class User(AbstractUser):
@@ -142,14 +147,25 @@ class User(AbstractUser):
         help_text='Email do usuário (usado como username)'
     )
     
+    # ManyToMany para suportar gestores em múltiplas lojas
+    tenants = models.ManyToManyField(
+        Tenant,
+        related_name='users',
+        blank=True,
+        verbose_name='Lojas/Empresas',
+        help_text='Lojas/Empresas às quais o usuário tem acesso (vazio apenas para ADMIN_MASTER)'
+    )
+    
+    # Campo legado mantido temporariamente para migração
+    # Será removido após migração dos dados
     tenant = models.ForeignKey(
         Tenant,
-        on_delete=models.PROTECT,
-        related_name='users',
+        on_delete=models.SET_NULL,
+        related_name='legacy_users',
         null=True,
         blank=True,
-        verbose_name='Tenant',
-        help_text='Loja/Empresa do usuário (None apenas para ADMIN_MASTER)'
+        verbose_name='Tenant (Legado)',
+        help_text='Campo legado - será removido após migração. Use tenants (ManyToMany) ao invés.'
     )
     
     role = models.CharField(
@@ -195,7 +211,7 @@ class User(AbstractUser):
         ordering = ['email']
         indexes = [
             models.Index(fields=['email']),
-            models.Index(fields=['tenant', 'role']),
+            models.Index(fields=['role']),
             models.Index(fields=['whatsapp_number']),
         ]
     
@@ -203,21 +219,24 @@ class User(AbstractUser):
         """
         Validação adicional do modelo antes de salvar.
         
-        Garante consistência entre role e tenant:
-        - ADMIN_MASTER não pode ter tenant
-        - Outros roles devem ter tenant
+        Garante consistência entre role e tenants:
+        - ADMIN_MASTER não pode ter tenants
+        - Outros roles devem ter pelo menos um tenant
         """
         super().clean()
         
-        if self.role == UserRole.ADMIN_MASTER and self.tenant_id:
+        # Validação para ManyToMany (tenants)
+        if self.role == UserRole.ADMIN_MASTER and self.tenants.exists():
             raise ValidationError({
-                'tenant': 'Administradores Master não podem ter tenant associado.'
+                'tenants': 'Administradores Master não podem ter tenants associados.'
             })
         
-        if self.role != UserRole.ADMIN_MASTER and not self.tenant_id:
-            raise ValidationError({
-                'tenant': 'Usuários não-master devem ter um tenant associado.'
-            })
+        if self.role != UserRole.ADMIN_MASTER and not self.tenants.exists():
+            # Se não tem tenants no ManyToMany, verifica o campo legado
+            if not self.tenant_id:
+                raise ValidationError({
+                    'tenants': 'Usuários não-master devem ter pelo menos um tenant associado.'
+                })
     
     def save(self, *args, **kwargs):
         """
@@ -240,15 +259,65 @@ class User(AbstractUser):
         """
         return self.role == UserRole.ADMIN_MASTER
     
-    def set_current_tenant(self) -> None:
+    def get_active_tenant(self, session_tenant_id=None):
+        """
+        Retorna o tenant ativo do usuário.
+        
+        Prioridade:
+        1. session_tenant_id (se fornecido e válido)
+        2. Primeiro tenant do ManyToMany
+        3. Campo legado tenant (para migração)
+        4. None (se ADMIN_MASTER)
+        
+        Args:
+            session_tenant_id: UUID do tenant da sessão (opcional)
+            
+        Returns:
+            Tenant ativo ou None
+        """
+        if self.is_master:
+            # Admin Master pode acessar qualquer tenant se fornecido
+            if session_tenant_id:
+                try:
+                    return Tenant.objects.get(id=session_tenant_id)
+                except Tenant.DoesNotExist:
+                    return None
+            return None
+        
+        # Se fornecido session_tenant_id, valida se o usuário tem acesso
+        if session_tenant_id:
+            try:
+                tenant = Tenant.objects.get(id=session_tenant_id)
+                # Verifica se o usuário tem acesso a este tenant
+                if self.tenants.filter(id=tenant.id).exists():
+                    return tenant
+                # Fallback: verifica campo legado
+                if self.tenant_id == tenant.id:
+                    return tenant
+            except Tenant.DoesNotExist:
+                pass
+        
+        # Retorna primeiro tenant do ManyToMany
+        first_tenant = self.tenants.first()
+        if first_tenant:
+            return first_tenant
+        
+        # Fallback: campo legado (para migração)
+        if self.tenant:
+            return self.tenant
+        
+        return None
+    
+    def set_current_tenant(self, session_tenant_id=None) -> None:
         """
         Define o tenant atual no contexto thread-local.
         
-        Útil para garantir que queries subsequentes sejam
-        automaticamente filtradas pelo tenant do usuário.
+        Args:
+            session_tenant_id: UUID do tenant da sessão (opcional)
         """
-        if self.tenant_id:
-            set_current_tenant(self.tenant_id)
+        active_tenant = self.get_active_tenant(session_tenant_id)
+        if active_tenant:
+            set_current_tenant(active_tenant.id)
         elif not self.is_master:
             # Se não for master e não tiver tenant, limpa o contexto
             from core.utils.tenant_context import clear_tenant
@@ -256,6 +325,15 @@ class User(AbstractUser):
     
     def __str__(self) -> str:
         """Representação string do usuário."""
-        tenant_info = f" - {self.tenant.name}" if self.tenant else " [MASTER]"
-        return f"{self.email} ({self.get_role_display()}){tenant_info}"
+        if self.is_master:
+            return f"{self.email} ({self.get_role_display()}) [MASTER]"
+        
+        tenant_count = self.tenants.count()
+        if tenant_count > 0:
+            return f"{self.email} ({self.get_role_display()}) - {tenant_count} loja(s)"
+        elif self.tenant:
+            return f"{self.email} ({self.get_role_display()}) - {self.tenant.name}"
+        else:
+            return f"{self.email} ({self.get_role_display()})"
+
 

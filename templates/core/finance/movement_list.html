@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency %}
+
+{% block title %}Movimentações - Caixô{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header Operacional -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold" style="color: #2D2926;">Movimentações</h1>
+            <p class="text-sm mt-1" style="color: #706B63;">Gerencie todas as receitas e despesas</p>
+        </div>
+        
+        <!-- Botões de Ação Rápida -->
+        <div class="flex gap-3">
+            <a href="{% url 'revenue_create' %}" 
+               class="px-6 py-3 rounded-lg font-medium transition hover:opacity-90 btn-action-primary"
+               style="background-color: #27AE60; color: #FFFFFF;">
+                + Nova Receita
+            </a>
+            <a href="{% url 'expense_create' %}" 
+               class="px-6 py-3 rounded-lg font-medium transition hover:opacity-90 btn-action-primary"
+               style="background-color: #E67E22; color: #FFFFFF;">
+                + Nova Despesa
+            </a>
+        </div>
+    </div>
+    
+    <!-- Totalizadores -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+            <div class="text-sm font-medium" style="color: #706B63;">Total de Entradas</div>
+            <div class="text-2xl font-bold mt-2" style="color: #27AE60;">
+                R$ {{ total_entradas|currency_br }}
+            </div>
+            <div class="text-xs mt-1" style="color: #706B63;">(Competência)</div>
+        </div>
+        <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+            <div class="text-sm font-medium" style="color: #706B63;">Total de Saídas</div>
+            <div class="text-2xl font-bold mt-2" style="color: #E67E22;">
+                R$ {{ total_saidas|currency_br }}
+            </div>
+            <div class="text-xs mt-1" style="color: #706B63;">(Competência)</div>
+        </div>
+        <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+            <div class="text-sm font-medium" style="color: #706B63;">Saldo Projetado</div>
+            <div class="text-2xl font-bold mt-2" 
+                 style="color: {% if saldo_projetado >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
+                R$ {{ saldo_projetado|currency_br }}
+            </div>
+            <div class="text-xs mt-1" style="color: #706B63;">(Competência)</div>
+        </div>
+        <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+            <div class="text-sm font-medium" style="color: #706B63;">Saldo Atual</div>
+            <div class="text-2xl font-bold mt-2" 
+                 style="color: {% if saldo_atual >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
+                R$ {{ saldo_atual|currency_br }}
+            </div>
+            <div class="text-xs mt-1" style="color: #706B63;">(Caixa)</div>
+        </div>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="p-4 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <!-- Período (Mês/Ano) -->
+            <div>
+                <label class="block text-sm font-medium mb-2" style="color: #2D2926;">Mês</label>
+                <select name="month" 
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                        onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                        onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    {% for m, nome in months %}
+                        <option value="{{ m }}" {% if m == month or m == 'all' and month == None %}selected{% endif %}>{{ nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-2" style="color: #2D2926;">Ano</label>
+                <select name="year" 
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                        onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                        onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    {% for y, nome in years %}
+                        <option value="{{ y }}" {% if y == year or y == 'all' and year == None %}selected{% endif %}>{{ nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Tipo (Despesa/Receita) -->
+            <div>
+                <label class="block text-sm font-medium mb-2" style="color: #2D2926;">Tipo</label>
+                <select name="type" 
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                        onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                        onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    <option value="all" {% if type_filter == 'all' %}selected{% endif %}>Todos</option>
+                    <option value="revenue" {% if type_filter == 'revenue' %}selected{% endif %}>Receitas</option>
+                    <option value="expense" {% if type_filter == 'expense' %}selected{% endif %}>Despesas</option>
+                </select>
+            </div>
+            
+            <!-- Status -->
+            <div>
+                <label class="block text-sm font-medium mb-2" style="color: #2D2926;">Status</label>
+                <select name="status" 
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                        onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                        onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Todos</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pendentes</option>
+                    <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Pagos</option>
+                </select>
+            </div>
+            
+            <!-- Busca -->
+            <div>
+                <label class="block text-sm font-medium mb-2" style="color: #2D2926;">Buscar</label>
+                <input type="text" 
+                       name="search" 
+                       value="{{ search_query }}"
+                       placeholder="Fornecedor, canal ou descrição..."
+                       class="w-full px-4 py-2 rounded-lg outline-none transition"
+                       style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                       onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                       onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+            </div>
+            
+            <!-- Botão Filtrar -->
+            <div class="md:col-span-5 flex gap-2">
+                <button type="submit" 
+                        class="px-6 py-2 rounded-lg font-medium transition hover:opacity-90"
+                        style="background-color: #D4AF37; color: #FFFFFF;">
+                    Filtrar
+                </button>
+                <a href="{% url 'movement_list' %}" 
+                   class="px-6 py-2 rounded-lg font-medium transition hover:opacity-90 border"
+                   style="border-color: #E9E4DB; color: #706B63;">
+                    Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Ordenação -->
+    <div class="p-4 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+        <form method="get" class="flex items-center gap-4">
+            <!-- Preserva filtros atuais -->
+            <input type="hidden" name="month" value="{% if month %}{{ month }}{% else %}all{% endif %}">
+            <input type="hidden" name="year" value="{% if year %}{{ year }}{% else %}all{% endif %}">
+            <input type="hidden" name="type" value="{{ type_filter }}">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+            <input type="hidden" name="search" value="{{ search_query }}">
+            
+            <label class="text-sm font-medium" style="color: #2D2926;">Ordenar por:</label>
+            <select name="order_by" 
+                    onchange="this.form.submit()"
+                    class="px-4 py-2 rounded-lg outline-none transition"
+                    style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                    onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                    onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                <option value="data" {% if order_by == 'data' %}selected{% endif %}>Data</option>
+                <option value="tipo" {% if order_by == 'tipo' %}selected{% endif %}>Tipo</option>
+                <option value="status" {% if order_by == 'status' %}selected{% endif %}>Status</option>
+            </select>
+        </form>
+    </div>
+    
+    <!-- Tabela de Movimentações -->
+    <div class="rounded-lg border overflow-hidden" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+        {% if installments %}
+            <!-- Desktop Table -->
+            <div class="hidden md:block overflow-x-auto">
+                <table class="w-full">
+                    <thead style="background-color: #FDFCF9;">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Vencimento</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Tipo</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Descrição</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Fornecedor</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Categoria/Canal</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Valor</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Status</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider" style="color: #706B63;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y" style="border-color: #E9E4DB;">
+                        {% for installment in installments %}
+                            {% with transaction=installment.transaction %}
+                            <tr class="hover:bg-opacity-50 transition" 
+                                style="background-color: {% if transaction.transaction_type == 'RECEITA' %}rgba(39, 174, 96, 0.05){% else %}rgba(230, 126, 34, 0.05){% endif %};">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: #2D2926;">
+                                    {{ installment.due_date|date:"d/m/Y" }}
+                                    {% if installment.payment_date %}
+                                        <div class="text-xs" style="color: #706B63;">
+                                            Pago: {{ installment.payment_date|date:"d/m/Y" }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if transaction.transaction_type == 'RECEITA' %}
+                                        <span class="inline-block px-3 py-1 rounded-full text-xs font-medium" 
+                                              style="background-color: #27AE60; color: #FFFFFF;">
+                                            Receita
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-block px-3 py-1 rounded-full text-xs font-medium" 
+                                              style="background-color: #E67E22; color: #FFFFFF;">
+                                            Despesa
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-sm" style="color: #2D2926;">
+                                    {{ transaction.description|default:"—"|truncatewords:10 }}
+                                </td>
+                                <td class="px-6 py-4 text-sm" style="color: #706B63;">
+                                    {% if transaction.transaction_type == 'DESPESA' %}
+                                        {{ transaction.supplier|default:"—" }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-sm" style="color: #706B63;">
+                                    {% if transaction.transaction_type == 'RECEITA' %}
+                                        <span class="inline-block px-2 py-1 rounded text-xs" style="background-color: #E8F5E9; color: #27AE60;">
+                                            {{ transaction.sales_channel.name|default:"—" }}
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-block px-2 py-1 rounded text-xs" style="background-color: #FDFCF9; color: #706B63;">
+                                            {{ transaction.subcategory.name|default:"—" }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" 
+                                    style="color: {% if transaction.transaction_type == 'RECEITA' %}#27AE60{% else %}#E67E22{% endif %};">
+                                    R$ {{ installment.amount|currency_br }}
+                                    {% if installment.penalty_amount > 0 %}
+                                        <div class="text-xs" style="color: #E67E22;">
+                                            + Multa: R$ {{ installment.penalty_amount|currency_br }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center">
+                                    {% if installment.status == 'PAGO' %}
+                                        <span class="inline-block px-3 py-1 rounded-full text-xs font-medium" 
+                                              style="background-color: #27AE60; color: #FFFFFF;">
+                                            Pago
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-block px-3 py-1 rounded-full text-xs font-medium border" 
+                                              style="border-color: #E67E22; color: #E67E22;">
+                                            Pendente
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center">
+                                    <div class="flex items-center justify-center gap-2">
+                                        {% if installment.status == 'PENDENTE' %}
+                                            <button onclick="markAsPaid('{{ installment.id }}', '{{ transaction.transaction_type }}')" 
+                                                    class="p-2 rounded transition hover:opacity-70"
+                                                    style="color: #27AE60;"
+                                                    title="{% if transaction.transaction_type == 'RECEITA' %}Marcar como recebido{% else %}Marcar como pago{% endif %}">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                </svg>
+                                            </button>
+                                        {% endif %}
+                                        <a href="{% if transaction.transaction_type == 'RECEITA' %}{% url 'revenue_edit' transaction.id %}{% else %}{% url 'expense_edit' transaction.id %}{% endif %}" 
+                                           class="p-2 rounded transition hover:opacity-70"
+                                           style="color: #2980B9;"
+                                           title="Editar">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                            </svg>
+                                        </a>
+                                        <form method="post" action="{% url 'movement_delete' transaction.id %}" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este lançamento?');">
+                                            {% csrf_token %}
+                                            <button type="submit" 
+                                                    class="p-2 rounded transition hover:opacity-70"
+                                                    style="color: #E67E22;"
+                                                    title="Excluir">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Mobile Cards -->
+            <div class="md:hidden divide-y" style="border-color: #E9E4DB;">
+                {% for installment in installments %}
+                    {% with transaction=installment.transaction %}
+                    <div class="p-4" style="background-color: {% if transaction.transaction_type == 'RECEITA' %}rgba(39, 174, 96, 0.05){% else %}rgba(230, 126, 34, 0.05){% endif %};">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="inline-block px-2 py-1 rounded-full text-xs font-medium" 
+                                          style="{% if transaction.transaction_type == 'RECEITA' %}background-color: #27AE60; color: #FFFFFF;{% else %}background-color: #E67E22; color: #FFFFFF;{% endif %}">
+                                        {% if transaction.transaction_type == 'RECEITA' %}Receita{% else %}Despesa{% endif %}
+                                    </span>
+                                    {% if installment.status == 'PAGO' %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium" 
+                                              style="background-color: #27AE60; color: #FFFFFF;">
+                                            Pago
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium border" 
+                                              style="border-color: #E67E22; color: #E67E22;">
+                                            Pendente
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                <div class="font-medium text-sm" style="color: #2D2926;">{{ transaction.description|default:"—"|truncatewords:8 }}</div>
+                                <div class="text-xs mt-1" style="color: #706B63;">
+                                    Vencimento: {{ installment.due_date|date:"d/m/Y" }}
+                                    {% if installment.payment_date %}
+                                        | Pago: {{ installment.payment_date|date:"d/m/Y" }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold text-sm" 
+                                     style="color: {% if transaction.transaction_type == 'RECEITA' %}#27AE60{% else %}#E67E22{% endif %};">
+                                    R$ {{ installment.amount|currency_br }}
+                                </div>
+                                {% if installment.penalty_amount > 0 %}
+                                    <div class="text-xs" style="color: #E67E22;">
+                                        + Multa: R$ {{ installment.penalty_amount|currency_br }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-3 space-y-2">
+                            {% if transaction.transaction_type == 'DESPESA' %}
+                                {% if transaction.supplier %}
+                                    <div class="text-xs" style="color: #706B63;">
+                                        <span class="font-medium">Fornecedor:</span> {{ transaction.supplier }}
+                                    </div>
+                                {% endif %}
+                                {% if transaction.subcategory %}
+                                    <div class="text-xs" style="color: #706B63;">
+                                        <span class="font-medium">Categoria:</span> {{ transaction.subcategory.name }}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                {% if transaction.sales_channel %}
+                                    <div class="text-xs" style="color: #706B63;">
+                                        <span class="font-medium">Canal:</span> 
+                                        <span class="inline-block px-2 py-1 rounded" style="background-color: #E8F5E9; color: #27AE60;">
+                                            {{ transaction.sales_channel.name }}
+                                        </span>
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center justify-end gap-2 mt-3">
+                            {% if installment.status == 'PENDENTE' %}
+                                <button onclick="markAsPaid('{{ installment.id }}', '{{ transaction.transaction_type }}')" 
+                                        class="p-1 rounded" 
+                                        style="color: #27AE60;"
+                                        title="{% if transaction.transaction_type == 'RECEITA' %}Marcar como recebido{% else %}Marcar como pago{% endif %}">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </button>
+                            {% endif %}
+                            <a href="{% if transaction.transaction_type == 'RECEITA' %}{% url 'revenue_edit' transaction.id %}{% else %}{% url 'expense_edit' transaction.id %}{% endif %}" class="p-1 rounded" style="color: #2980B9;">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                    {% endwith %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="p-12 text-center">
+                <p class="text-sm" style="color: #706B63;">Nenhuma movimentação encontrada para o período selecionado.</p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Contador de Registros -->
+    <div class="text-sm text-center" style="color: #706B63;">
+        Mostrando {{ total_registros }} registro{{ total_registros|pluralize }}
+    </div>
+</div>
+
+<script>
+function markAsPaid(installmentId, transactionType) {
+    // Define a mensagem de confirmação baseada no tipo de transação
+    const confirmMessage = transactionType === 'RECEITA' 
+        ? 'Marcar esta parcela como recebida?' 
+        : 'Marcar esta parcela como paga?';
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    fetch(`/movimentacoes/parcela/${installmentId}/marcar-pago/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            const errorMessage = transactionType === 'RECEITA'
+                ? 'Erro ao marcar como recebido. Tente novamente.'
+                : 'Erro ao marcar como pago. Tente novamente.';
+            alert('Erro: ' + (data.error || errorMessage));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        const errorMessage = transactionType === 'RECEITA'
+            ? 'Erro ao marcar como recebido. Tente novamente.'
+            : 'Erro ao marcar como pago. Tente novamente.';
+        alert(errorMessage);
+    });
+}
+</script>
+{% endblock %}

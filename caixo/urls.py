@@ -6,14 +6,23 @@ The `urlpatterns` list routes URLs to views. For more information please see:
 """
 
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # API REST e Webhooks
-    path('api/v1/', include('core.urls')),
+    
+    # Autenticação
+    path('login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(next_page='/login/'), name='logout'),
+    
+    # Dashboard e Views do Core (sem namespace para evitar conflito)
+    path('', include('core.urls')),
+    
+    # API REST e Webhooks (com namespace diferente)
+    path('api/v1/', include(('core.urls', 'core'), namespace='api')),
 ]
 
 # Configuração do título do Admin

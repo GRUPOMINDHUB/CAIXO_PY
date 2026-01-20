@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Caixô{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Cabeçalho -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold mb-2" style="color: #2D2926;">{{ title }}</h1>
+                <p class="text-sm" style="color: #706B63;">Preencha os dados da empresa abaixo</p>
+            </div>
+            <a href="{% url 'tenant_list' %}" 
+               class="hover:opacity-70 transition" style="color: #706B63;">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Mensagens de Erro -->
+            {% if form.errors %}
+            <div class="px-4 py-3 rounded-lg border" style="background-color: #FDF2F2; border-color: #E67E22; color: #E67E22;">
+                <p class="font-semibold mb-2">Erro ao salvar:</p>
+                <ul class="list-disc list-inside space-y-1">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ field|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Informações Básicas -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Informações Básicas</h2>
+                
+                <!-- Razão Social -->
+                <div>
+                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.name.label }} <span style="color: #E67E22;">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.help_text %}
+                    <p class="mt-1 text-xs" style="color: #706B63;">{{ form.name.help_text }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- CNPJ -->
+                <div>
+                    <label for="{{ form.cnpj.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.cnpj.label }} <span style="color: #E67E22;">*</span>
+                    </label>
+                    {{ form.cnpj }}
+                    {% if form.cnpj.help_text %}
+                    <p class="mt-1 text-xs" style="color: #706B63;">{{ form.cnpj.help_text }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Configurações -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Configurações</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Plano -->
+                    <div>
+                        <label for="{{ form.plan.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.plan.label }} <span style="color: #E67E22;">*</span>
+                        </label>
+                        {{ form.plan }}
+                        {% if form.plan.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.plan.help_text }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Status -->
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.status.label }} <span style="color: #E67E22;">*</span>
+                        </label>
+                        {{ form.status }}
+                        {% if form.status.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.status.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Faturamento -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Configurações de Faturamento</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Dia Semanal -->
+                    <div>
+                        <label for="{{ form.billing_day_weekly.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.billing_day_weekly.label }}
+                        </label>
+                        {{ form.billing_day_weekly }}
+                        {% if form.billing_day_weekly.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.billing_day_weekly.help_text }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Dia Mensal -->
+                    <div>
+                        <label for="{{ form.billing_day_monthly.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.billing_day_monthly.label }}
+                        </label>
+                        {{ form.billing_day_monthly }}
+                        {% if form.billing_day_monthly.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.billing_day_monthly.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evolution API -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Integração WhatsApp</h2>
+                
+                <!-- Instância Evolution API -->
+                <div>
+                    <label for="{{ form.evolution_instance_name.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.evolution_instance_name.label }}
+                    </label>
+                    {{ form.evolution_instance_name }}
+                    {% if form.evolution_instance_name.help_text %}
+                    <p class="mt-1 text-xs" style="color: #706B63;">{{ form.evolution_instance_name.help_text }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex items-center justify-end space-x-4 pt-4 border-t" style="border-color: #E9E4DB;">
+                <a href="{% url 'tenant_list' %}" 
+                   class="px-6 py-2 rounded-lg transition hover:opacity-80" style="border: 1px solid #E9E4DB; color: #706B63; background-color: #FFFFFF;">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="px-6 py-2 rounded-lg transition hover:opacity-90" 
+                        style="background-color: #D4AF37; color: #FFFFFF;"
+                        onmouseover="this.style.backgroundColor='#F4D03F'"
+                        onmouseout="this.style.backgroundColor='#D4AF37'">
+                    {{ action }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Aplica estilo dourado nos campos de formulário ao focar
+    document.addEventListener('DOMContentLoaded', function() {
+        const inputs = document.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.style.border = '1px solid #E9E4DB';
+            input.style.color = '#2D2926';
+            input.style.backgroundColor = '#FFFFFF';
+            input.style.borderRadius = '0.5rem';
+            input.style.padding = '0.5rem 1rem';
+            
+            input.addEventListener('focus', function() {
+                this.style.borderColor = '#D4AF37';
+                this.style.boxShadow = '0 0 0 3px rgba(212, 175, 55, 0.1)';
+            });
+            
+            input.addEventListener('blur', function() {
+                this.style.borderColor = '#E9E4DB';
+                this.style.boxShadow = 'none';
+            });
+        });
+    });
+</script>
+{% endblock %}

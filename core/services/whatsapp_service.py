@@ -209,3 +209,4 @@ Por favor, confirme se os dados estão corretos:"""
         text = f"❌ *Erro ao processar mensagem*\n\n{error_message}\n\nPor favor, tente enviar novamente de forma mais clara."
         return self.send_text_message(to_jid, text)
 
+

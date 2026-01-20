@@ -41,3 +41,4 @@ def clear_tenant() -> None:
     if hasattr(_context, 'tenant_id'):
         delattr(_context, 'tenant_id')
 
+

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Caixô</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body style="background: linear-gradient(135deg, #FDFCF9 0%, #F5E6D3 100%); min-height: 100vh;" class="flex items-center justify-center p-4">
+    <div class="rounded-2xl shadow-xl w-full max-w-md p-8" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+        <!-- Logo e Título -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold mb-2" style="color: #D4AF37;">Caixô</h1>
+            <p style="color: #706B63;">Sistema de Gestão Financeira</p>
+        </div>
+
+        <!-- Mensagens de Erro/Sucesso -->
+        {% if form.errors %}
+            <div class="px-4 py-3 rounded-lg mb-4 border" style="background-color: #FDF2F2; border-color: #E67E22; color: #E67E22;">
+                <p class="font-semibold">Erro ao fazer login:</p>
+                <ul class="list-disc list-inside mt-2">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="px-4 py-3 rounded-lg mb-4 border" style="background-color: #F0FDF4; border-color: #27AE60; color: #27AE60;">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- Formulário de Login -->
+        <form method="post" action="{% url 'login' %}" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Campo Email -->
+            <div>
+                <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    Email
+                </label>
+                <input 
+                    type="email" 
+                    name="{{ form.username.name }}" 
+                    id="{{ form.username.id_for_label }}"
+                    required
+                    autofocus
+                    class="w-full px-4 py-3 rounded-lg outline-none transition"
+                    style="border: 1px solid #E9E4DB; color: #2D2926;"
+                    onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                    onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';"
+                    placeholder="seu@email.com"
+                >
+            </div>
+
+            <!-- Campo Senha -->
+            <div>
+                <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    Senha
+                </label>
+                <input 
+                    type="password" 
+                    name="{{ form.password.name }}" 
+                    id="{{ form.password.id_for_label }}"
+                    required
+                    class="w-full px-4 py-3 rounded-lg outline-none transition"
+                    style="border: 1px solid #E9E4DB; color: #2D2926;"
+                    onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                    onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';"
+                    placeholder="••••••••"
+                >
+            </div>
+
+            <!-- Botão de Login -->
+            <button 
+                type="submit"
+                class="w-full py-3 rounded-lg font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2"
+                style="background-color: #D4AF37; color: #FFFFFF; focus:ring-color: #D4AF37;"
+                onmouseover="this.style.backgroundColor='#F4D03F'"
+                onmouseout="this.style.backgroundColor='#D4AF37'"
+            >
+                Entrar
+            </button>
+        </form>
+
+        <!-- Link para Recuperação de Senha (futuro) -->
+        <div class="mt-6 text-center">
+            <a href="#" class="text-sm hover:opacity-70 transition" style="color: #D4AF37;">
+                Esqueceu sua senha?
+            </a>
+        </div>
+    </div>
+</body>
+</html>

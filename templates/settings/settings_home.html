@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Configurações - Caixô{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold" style="color: #2D2926;">Configurações</h1>
+        <p class="text-sm mt-1" style="color: #706B63;">Personalize a aparência e gerencie a segurança da sua conta</p>
+    </div>
+    
+    <!-- Mensagens de Feedback -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="px-4 py-3 rounded-lg border {% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-800{% else %}bg-green-50 border-green-200 text-green-800{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <!-- Seção: Aparência -->
+    <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold mb-2" style="color: #2D2926;">Aparência</h2>
+            <p class="text-sm" style="color: #706B63;">Escolha o tema que melhor se adapta ao seu ambiente de trabalho</p>
+        </div>
+        
+        <!-- Seletor de Tema -->
+        <div class="mt-4">
+            <label class="block text-sm font-medium mb-3" style="color: #2D2926;">Tema</label>
+            <div class="flex flex-wrap gap-3">
+                <!-- Tema Claro -->
+                <button type="button" 
+                        id="theme-light"
+                        onclick="handleThemeChange('light')"
+                        class="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition hover:opacity-90 border"
+                        style="border-color: #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                    <span class="text-xl">☀️</span>
+                    <span>Claro</span>
+                </button>
+                
+                <!-- Tema Escuro -->
+                <button type="button" 
+                        id="theme-dark"
+                        onclick="handleThemeChange('dark')"
+                        class="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition hover:opacity-90 border"
+                        style="border-color: #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                    <span class="text-xl">🌙</span>
+                    <span>Escuro</span>
+                </button>
+                
+                <!-- Tema Sistema (Padrão) -->
+                <button type="button" 
+                        id="theme-system"
+                        onclick="handleThemeChange('system')"
+                        class="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition hover:opacity-90 border"
+                        style="border-color: #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                    <span class="text-xl">💻</span>
+                    <span>Sistema</span>
+                </button>
+            </div>
+            <p class="text-xs mt-2" style="color: #706B63;">
+                O tema "Sistema" segue a preferência do seu sistema operacional (Windows/macOS/Linux)
+            </p>
+        </div>
+    </div>
+    
+    <!-- Seção: Segurança -->
+    <div class="p-6 rounded-lg border" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold mb-2" style="color: #2D2926;">Segurança</h2>
+            <p class="text-sm" style="color: #706B63;">Altere sua senha para manter sua conta segura</p>
+        </div>
+        
+        <!-- Formulário de Alteração de Senha -->
+        <form method="post" action="{% url 'change_password' %}" class="mt-4 space-y-4">
+            {% csrf_token %}
+            
+            <!-- Senha Atual -->
+            <div>
+                <label for="{{ password_form.old_password.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    {{ password_form.old_password.label }}
+                </label>
+                {% if password_form %}
+                    {{ password_form.old_password }}
+                {% else %}
+                    <input type="password" name="old_password" required id="id_old_password" 
+                           class="w-full px-4 py-2 rounded-lg outline-none transition"
+                           style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                           onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                           onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                {% endif %}
+                {% if password_form and password_form.old_password.errors %}
+                    <p class="text-xs mt-1" style="color: #E67E22;">{{ password_form.old_password.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Nova Senha -->
+            <div>
+                <label for="{% if password_form %}{{ password_form.new_password1.id_for_label }}{% else %}id_new_password1{% endif %}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    {% if password_form %}{{ password_form.new_password1.label }}{% else %}Nova Senha{% endif %}
+                </label>
+                <div class="relative">
+                    {% if password_form %}
+                        {{ password_form.new_password1 }}
+                    {% else %}
+                        <input type="password" name="new_password1" required id="id_new_password1" 
+                               class="w-full px-4 py-2 rounded-lg outline-none transition"
+                               style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                               onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                               onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    {% endif %}
+                    <button type="button" 
+                            onclick="togglePasswordVisibility('{% if password_form %}{{ password_form.new_password1.id_for_label }}{% else %}id_new_password1{% endif %}')"
+                            class="absolute right-3 top-1/2 transform -translate-y-1/2"
+                            style="color: #706B63;">
+                        <svg id="eye-{% if password_form %}{{ password_form.new_password1.id_for_label }}{% else %}id_new_password1{% endif %}" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                        <svg id="eye-off-{% if password_form %}{{ password_form.new_password1.id_for_label }}{% else %}id_new_password1{% endif %}" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                        </svg>
+                    </button>
+                </div>
+                {% if password_form and password_form.new_password1.errors %}
+                    <p class="text-xs mt-1" style="color: #E67E22;">{{ password_form.new_password1.errors.0 }}</p>
+                {% endif %}
+                {% if password_form and password_form.new_password1.help_text %}
+                    <p class="text-xs mt-1" style="color: #706B63;">{{ password_form.new_password1.help_text }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Confirmar Nova Senha -->
+            <div>
+                <label for="{% if password_form %}{{ password_form.new_password2.id_for_label }}{% else %}id_new_password2{% endif %}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    {% if password_form %}{{ password_form.new_password2.label }}{% else %}Confirmar Nova Senha{% endif %}
+                </label>
+                <div class="relative">
+                    {% if password_form %}
+                        {{ password_form.new_password2 }}
+                    {% else %}
+                        <input type="password" name="new_password2" required id="id_new_password2" 
+                               class="w-full px-4 py-2 rounded-lg outline-none transition"
+                               style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                               onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                               onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    {% endif %}
+                    <button type="button" 
+                            onclick="togglePasswordVisibility('{% if password_form %}{{ password_form.new_password2.id_for_label }}{% else %}id_new_password2{% endif %}')"
+                            class="absolute right-3 top-1/2 transform -translate-y-1/2"
+                            style="color: #706B63;">
+                        <svg id="eye-{% if password_form %}{{ password_form.new_password2.id_for_label }}{% else %}id_new_password2{% endif %}" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                        <svg id="eye-off-{% if password_form %}{{ password_form.new_password2.id_for_label }}{% else %}id_new_password2{% endif %}" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                        </svg>
+                    </button>
+                </div>
+                {% if password_form and password_form.new_password2.errors %}
+                    <p class="text-xs mt-1" style="color: #E67E22;">{{ password_form.new_password2.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Botão de Envio -->
+            <div class="pt-2">
+                <button type="submit" 
+                        class="px-6 py-3 rounded-lg font-medium transition hover:opacity-90"
+                        style="background-color: #D4AF37; color: #FFFFFF;">
+                    Alterar Senha
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Função para alternar visibilidade da senha
+function togglePasswordVisibility(fieldId) {
+    const field = document.getElementById(fieldId);
+    const eyeIcon = document.getElementById('eye-' + fieldId);
+    const eyeOffIcon = document.getElementById('eye-off-' + fieldId);
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        eyeIcon.classList.add('hidden');
+        eyeOffIcon.classList.remove('hidden');
+    } else {
+        field.type = 'password';
+        eyeIcon.classList.remove('hidden');
+        eyeOffIcon.classList.add('hidden');
+    }
+}
+
+// Função para lidar com mudança de tema (com fallback)
+function handleThemeChange(theme) {
+    // Tenta usar a função global do theme-switcher.js
+    if (typeof window.setTheme === 'function') {
+        window.setTheme(theme);
+    } else {
+        // Fallback: aplica o tema diretamente se o script ainda não carregou
+        console.warn('Theme switcher ainda não carregou, aplicando tema diretamente...');
+        const html = document.documentElement;
+        const THEME_STORAGE_KEY = 'caixo-theme';
+        
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (e) {
+            console.error('Erro ao salvar tema:', e);
+        }
+        
+        html.classList.remove('dark');
+        
+        if (theme === 'dark') {
+            html.classList.add('dark');
+        } else if (theme === 'system') {
+            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (isDark) {
+                html.classList.add('dark');
+            }
+        }
+        // Se theme === 'light', não adiciona nenhuma classe
+        
+        // Atualiza botões visualmente
+        updateThemeButtonsLocal(theme);
+    }
+}
+
+// Função local para atualizar botões (fallback)
+function updateThemeButtonsLocal(activeTheme) {
+    const buttons = ['theme-light', 'theme-dark', 'theme-system'];
+    buttons.forEach(buttonId => {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            const isActive = buttonId === 'theme-' + activeTheme;
+            button.style.borderColor = isActive ? '#D4AF37' : '#E9E4DB';
+            button.style.color = isActive ? '#FFFFFF' : '#2D2926';
+            button.style.backgroundColor = isActive ? '#D4AF37' : '#FFFFFF';
+        }
+    });
+}
+
+// Atualiza o estado visual dos botões de tema ao carregar a página
+document.addEventListener('DOMContentLoaded', function() {
+    // Aguarda um pouco para garantir que o script externo foi carregado
+    setTimeout(function() {
+        if (typeof window.updateThemeButtons === 'function') {
+            window.updateThemeButtons();
+        } else {
+            // Fallback: usa função local
+            const savedTheme = localStorage.getItem('caixo-theme') || 'system';
+            updateThemeButtonsLocal(savedTheme);
+        }
+    }, 100);
+});
+</script>
+{% endblock %}

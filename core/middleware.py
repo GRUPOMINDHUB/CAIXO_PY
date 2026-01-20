@@ -13,6 +13,7 @@ Características:
 
 from typing import Optional
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib.auth import get_user_model
 
 from core.utils.tenant_context import set_current_tenant, clear_tenant
 
@@ -36,9 +37,10 @@ class TenantMiddleware(MiddlewareMixin):
         """
         Processa a requisição e define o tenant no contexto.
         
-        Se o usuário estiver autenticado e possuir um tenant_id,
-        define automaticamente no contexto thread-local para que
-        todas as queries subsequentes sejam filtradas automaticamente.
+        Suporta troca de tenant via sessão:
+        - Se houver tenant_id na sessão, usa ele (validando permissão)
+        - Se não houver, usa o primeiro tenant do usuário
+        - ADMIN_MASTER pode acessar qualquer tenant se fornecido na sessão
         
         Usa try/finally para garantir que o contexto seja sempre limpo
         ao final da requisição, prevenindo vazamento de dados entre threads.
@@ -54,11 +56,42 @@ class TenantMiddleware(MiddlewareMixin):
             if hasattr(request, 'user') and request.user.is_authenticated:
                 user = request.user
                 
-                # Verifica se o usuário tem tenant_id
-                # ADMIN_MASTER não tem tenant (None)
-                if hasattr(user, 'tenant_id') and user.tenant_id is not None:
+                # Prefetch tenants para evitar N+1
+                if not hasattr(user, '_prefetched_tenants'):
+                    User = get_user_model()
+                    user = User.objects.prefetch_related('tenants').get(pk=user.pk)
+                    request.user = user
+                
+                # Obtém tenant_id da sessão (se houver)
+                session_tenant_id = request.session.get('tenant_id', None)
+                
+                # Obtém o tenant ativo (valida permissões)
+                active_tenant = user.get_active_tenant(session_tenant_id)
+                
+                if active_tenant:
                     # Define o tenant no contexto thread-local
-                    set_current_tenant(user.tenant_id)
+                    set_current_tenant(active_tenant.id)
+                    # Injeta o tenant no request para facilitar acesso nas views
+                    # Isso permite usar request.tenant diretamente nos templates
+                    request.tenant = active_tenant
+                    request.tenant_id = active_tenant.id
+                else:
+                    # ADMIN_MASTER sem tenant selecionado ou usuário sem tenants
+                    request.tenant = None
+                    request.tenant_id = None
+                
+                # Para Admin Master, sempre busca todos os tenants para o dropdown
+                # (independente de ter um tenant ativo ou não)
+                # Inclui tenants ACTIVE e TRIAL (período de teste)
+                if user.is_master:
+                    from core.models.tenant import Tenant, TenantStatus
+                    request.all_tenants = Tenant.objects.filter(
+                        status__in=[TenantStatus.ACTIVE, TenantStatus.TRIAL]
+                    ).order_by('name')
+            else:
+                # Usuário não autenticado
+                request.tenant = None
+                request.tenant_id = None
         finally:
             # Garante que o contexto seja limpo mesmo em caso de exceção
             # Este finally é executado após process_response, mas serve como

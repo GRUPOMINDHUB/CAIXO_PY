@@ -15,8 +15,9 @@ from core.utils.cnpj import validate_cnpj, clean_cnpj, format_cnpj
 
 class TenantPlan(models.TextChoices):
     """Planos disponíveis para os tenants."""
-    BASIC = 'BASIC', 'Básico'
-    PRO = 'PRO', 'Profissional'
+    STARTER = 'STARTER', 'Starter'
+    PLUS = 'PLUS', 'Plus'
+    PRO = 'PRO', 'Pro'
 
 
 class TenantStatus(models.TextChoices):
@@ -80,9 +81,9 @@ class Tenant(models.Model):
     plan = models.CharField(
         max_length=10,
         choices=TenantPlan.choices,
-        default=TenantPlan.BASIC,
+        default=TenantPlan.STARTER,
         verbose_name='Plano',
-        help_text='Plano de assinatura do tenant'
+        help_text='Plano de assinatura do tenant (Starter=1 instância, Plus=2, Pro=5)'
     )
     
     status = models.CharField(
@@ -119,6 +120,30 @@ class Tenant(models.Model):
         help_text='Data e hora da última atualização do tenant'
     )
     
+    evolution_instance_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Nome da Instância Evolution API',
+        help_text='Nome da instância do WhatsApp configurada na Evolution API (usado para status de conexão)'
+    )
+    
+    neighborhood = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Bairro',
+        help_text='Bairro onde o restaurante está localizado (necessário para integrações de clima e eventos)'
+    )
+    
+    city = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Cidade',
+        help_text='Cidade onde o restaurante está localizado (necessário para integrações de clima e eventos)'
+    )
+    
     class Meta:
         verbose_name = 'Tenant'
         verbose_name_plural = 'Tenants'
@@ -150,6 +175,48 @@ class Tenant(models.Model):
         self.full_clean()  # Chama clean() que valida e limpa o CNPJ
         super().save(*args, **kwargs)
     
+    def get_max_instances(self) -> int:
+        """
+        Retorna o número máximo de instâncias WhatsApp permitidas pelo plano.
+        
+        Limites por plano:
+        - STARTER: 1 instância
+        - PLUS: 2 instâncias
+        - PRO: 5 instâncias
+        
+        Returns:
+            Número máximo de instâncias permitidas
+        """
+        limits = {
+            TenantPlan.STARTER: 1,
+            TenantPlan.PLUS: 2,
+            TenantPlan.PRO: 5,
+        }
+        return limits.get(self.plan, 1)
+    
+    def get_current_instances_count(self) -> int:
+        """
+        Conta quantas instâncias WhatsApp estão cadastradas para este tenant.
+        
+        Por enquanto, conta apenas o campo evolution_instance_name.
+        No futuro, quando houver modelo específico de instâncias, ajustar aqui.
+        
+        Returns:
+            Número de instâncias cadastradas
+        """
+        # Por enquanto, conta apenas se evolution_instance_name está preenchido
+        # No futuro, quando houver modelo WhatsAppInstance, contar de lá
+        return 1 if self.evolution_instance_name and self.evolution_instance_name.strip() else 0
+    
+    def can_add_instance(self) -> bool:
+        """
+        Verifica se o tenant pode adicionar mais uma instância WhatsApp.
+        
+        Returns:
+            True se pode adicionar, False se atingiu o limite do plano
+        """
+        return self.get_current_instances_count() < self.get_max_instances()
+    
     @property
     def cnpj_formatted(self) -> str:
         """
@@ -163,4 +230,5 @@ class Tenant(models.Model):
     def __str__(self) -> str:
         """Representação string do tenant."""
         return f"{self.name} ({self.cnpj_formatted})"
+
 

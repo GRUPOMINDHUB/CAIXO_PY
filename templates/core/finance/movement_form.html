@@ -1,0 +1,1088 @@
+{% extends "base.html" %}
+{% load static %}
+{% load currency %}
+
+{% block title %}{{ title|default:"Nova Movimentação" }} - Caixô{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold" style="color: #2D2926;">
+            {{ title|default:"Nova Movimentação" }}
+        </h1>
+        <p class="text-sm mt-1" style="color: #706B63;">
+            {% if transaction %}Atualize os dados da movimentação{% else %}Preencha os dados para criar um novo lançamento{% endif %}
+        </p>
+    </div>
+    
+    <!-- Formulário -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="p-6 rounded-lg border space-y-6" style="background-color: #FFFFFF; border-color: #E9E4DB;">
+            <!-- Descrição -->
+            <div>
+                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                    {{ form.description.label }}
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <p class="text-xs mt-1" style="color: #E67E22;">{{ form.description.errors.0 }}</p>
+                {% endif %}
+                {% if form.description.help_text %}
+                    <p class="text-xs mt-1" style="color: #706B63;">{{ form.description.help_text }}</p>
+                {% endif %}
+            </div>
+            
+            <!-- Valor e Data de Competência -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.amount.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.amount.label }}
+                    </label>
+                    {{ form.amount }}
+                    {% if form.amount.errors %}
+                        <p class="text-xs mt-1" style="color: #E67E22;">{{ form.amount.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                {% if form_type == 'revenue' %}
+                    <!-- Período de Competência (apenas para receitas) -->
+                    <div>
+                        <label for="{{ form.competence_date.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.competence_date.label }}
+                        </label>
+                        {{ form.competence_date }}
+                        {% if form.competence_date.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.competence_date.errors.0 }}</p>
+                        {% endif %}
+                        {% if form.competence_date.help_text %}
+                            <p class="text-xs mt-1" style="color: #706B63;">{{ form.competence_date.help_text }}</p>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <!-- Data de Competência (apenas para despesas) -->
+                    <div>
+                        <label for="{{ form.competence_date.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.competence_date.label }}
+                        </label>
+                        {{ form.competence_date }}
+                        {% if form.competence_date.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.competence_date.errors.0 }}</p>
+                        {% endif %}
+                        {% if form.competence_date.help_text %}
+                            <p class="text-xs mt-1" style="color: #706B63;">{{ form.competence_date.help_text }}</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+            
+            {% if form_type == 'revenue' %}
+                <!-- Data de Fim do Período (apenas para receitas) -->
+                <div>
+                    <label for="{{ form.competence_date_end.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.competence_date_end.label }}
+                    </label>
+                    {{ form.competence_date_end }}
+                    {% if form.competence_date_end.errors %}
+                        <p class="text-xs mt-1" style="color: #E67E22;">{{ form.competence_date_end.errors.0 }}</p>
+                    {% endif %}
+                    {% if form.competence_date_end.help_text %}
+                        <p class="text-xs mt-1" style="color: #706B63;">{{ form.competence_date_end.help_text }}</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+            
+            {% if form_type == 'expense' %}
+                <!-- Subcategoria e Categoria (apenas para despesas) - Reordenado: Subcategoria primeiro -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="{{ form.subcategory.id_for_label }}" class="block text-sm font-medium" style="color: #2D2926;">
+                                {{ form.subcategory.label }}
+                            </label>
+                            <div class="flex gap-2">
+                                <button type="button" 
+                                        onclick="openEditSubcategoryModal()"
+                                        id="editSubcategoryBtn"
+                                        class="text-xs px-3 py-1 rounded transition hover:opacity-90 hidden"
+                                        style="background-color: #2980B9; color: #FFFFFF;">
+                                    ✏️ Editar
+                                </button>
+                                <button type="button" 
+                                        onclick="openSubcategoryModal()"
+                                        class="text-xs px-3 py-1 rounded transition hover:opacity-90"
+                                        style="background-color: #D4AF37; color: #FFFFFF;">
+                                    + Nova Subcategoria
+                                </button>
+                            </div>
+                        </div>
+                        <select name="{{ form.subcategory.name }}" id="{{ form.subcategory.id_for_label }}" 
+                                class="w-full px-4 py-2 rounded-lg outline-none transition subcategory-select"
+                                style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                            <option value="">Selecione uma subcategoria</option>
+                        </select>
+                        {% if form.subcategory.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.subcategory.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.category.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.category.label }}
+                        </label>
+                        <select name="{{ form.category.name }}" id="{{ form.category.id_for_label }}" 
+                                class="w-full px-4 py-2 rounded-lg outline-none transition"
+                                style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                                onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                                onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';"
+                                required>
+                            <option value="">Selecione uma categoria</option>
+                            {% if categories %}
+                                {% for category in categories %}
+                                    <option value="{{ category.id }}" {% if form.category.value == category.id %}selected{% endif %}>
+                                        {{ category.name }}
+                                    </option>
+                                {% endfor %}
+                            {% else %}
+                                {% for category in form.category.field.queryset.all %}
+                                    <option value="{{ category.id }}" {% if form.category.value == category.id %}selected{% endif %}>
+                                        {{ category.name }}
+                                    </option>
+                                {% empty %}
+                                    <option value="" disabled>Nenhuma categoria disponível</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        {% if form.category.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.category.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Fornecedor (apenas para despesas) -->
+                <div>
+                    <label for="{{ form.supplier.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                        {{ form.supplier.label }}
+                    </label>
+                    {{ form.supplier }}
+                    {% if form.supplier.errors %}
+                        <p class="text-xs mt-1" style="color: #E67E22;">{{ form.supplier.errors.0 }}</p>
+                    {% endif %}
+                    {% if form.supplier.help_text %}
+                        <p class="text-xs mt-1" style="color: #706B63;">{{ form.supplier.help_text }}</p>
+                    {% endif %}
+                </div>
+            {% elif form_type == 'revenue' %}
+                <!-- Canal de Venda e Data de Caixa (apenas para receitas) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="{{ form.sales_channel.id_for_label }}" class="block text-sm font-medium" style="color: #2D2926;">
+                                {{ form.sales_channel.label }}
+                            </label>
+                            <button type="button" 
+                                    onclick="openSalesChannelModal()"
+                                    class="text-xs px-3 py-1 rounded transition hover:opacity-90"
+                                    style="background-color: #D4AF37; color: #FFFFFF;">
+                                + Novo Canal
+                            </button>
+                        </div>
+                        {{ form.sales_channel }}
+                        {% if form.sales_channel.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.sales_channel.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.cash_date.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.cash_date.label }}
+                        </label>
+                        {{ form.cash_date }}
+                        {% if form.cash_date.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.cash_date.errors.0 }}</p>
+                        {% endif %}
+                        {% if form.cash_date.help_text %}
+                            <p class="text-xs mt-1" style="color: #706B63;">{{ form.cash_date.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Parcelamento (apenas na criação) -->
+            {% if not transaction %}
+                <div class="p-4 rounded-lg" style="background-color: #FDFCF9; border: 1px solid #E9E4DB;">
+                    <h3 class="text-sm font-medium mb-4" style="color: #2D2926;">Parcelamento</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="{{ form.num_parcelas.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                                {{ form.num_parcelas.label }}
+                            </label>
+                            {{ form.num_parcelas }}
+                            {% if form.num_parcelas.errors %}
+                                <p class="text-xs mt-1" style="color: #E67E22;">{{ form.num_parcelas.errors.0 }}</p>
+                            {% endif %}
+                            {% if form.num_parcelas.help_text %}
+                                <p class="text-xs mt-1" style="color: #706B63;">{{ form.num_parcelas.help_text }}</p>
+                            {% endif %}
+                        </div>
+                        <div id="periodicidade_container" class="hidden">
+                            <label for="{{ form.periodicidade.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                                {{ form.periodicidade.label }}
+                            </label>
+                            {{ form.periodicidade }}
+                            {% if form.periodicidade.errors %}
+                                <p class="text-xs mt-1" style="color: #E67E22;">{{ form.periodicidade.errors.0 }}</p>
+                            {% endif %}
+                            {% if form.periodicidade.help_text %}
+                                <p class="text-xs mt-1" style="color: #706B63;">{{ form.periodicidade.help_text }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Data do Primeiro Vencimento (oculta quando Personalizado) -->
+                    <div id="primeira_vencimento_container" class="mt-4">
+                        <label for="{{ form.primeira_vencimento.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.primeira_vencimento.label }}
+                        </label>
+                        {{ form.primeira_vencimento }}
+                        {% if form.primeira_vencimento.errors %}
+                            <p class="text-xs mt-1" style="color: #E67E22;">{{ form.primeira_vencimento.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Campos personalizados de vencimento (apenas quando Personalizado) -->
+                    <div id="vencimentos_personalizados_container" class="hidden mt-4">
+                        <label class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            Datas de Vencimento (Personalizado)
+                        </label>
+                        <div id="vencimentos_personalizados_list" class="space-y-2">
+                            <!-- Será preenchido dinamicamente via JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <label class="flex items-center gap-2">
+                            {{ form.ja_pago }}
+                            <span class="text-sm" style="color: #2D2926;">{{ form.ja_pago.label }}</span>
+                        </label>
+                        {% if form.ja_pago.help_text %}
+                            <p class="text-xs mt-1" style="color: #706B63;">{{ form.ja_pago.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% elif transaction %}
+                <!-- Mostra parcelas existentes na edição -->
+                {% if installments %}
+                    <div class="p-4 rounded-lg" style="background-color: #FDFCF9; border: 1px solid #E9E4DB;">
+                        <h3 class="text-sm font-medium mb-4" style="color: #2D2926;">Parcelas</h3>
+                        <div class="space-y-2">
+                            {% for installment in installments %}
+                                <div class="flex items-center justify-between p-3 rounded" style="background-color: #FFFFFF; border: 1px solid #E9E4DB;">
+                                    <div>
+                                        <div class="text-sm font-medium" style="color: #2D2926;">
+                                            Vencimento: {{ installment.due_date|date:"d/m/Y" }}
+                                        </div>
+                                        <div class="text-xs" style="color: #706B63;">
+                                            Valor: R$ {{ installment.amount|currency_br }}
+                                            {% if installment.penalty_amount > 0 %}
+                                                + Multas: R$ {{ installment.penalty_amount|currency_br }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        {% if installment.status == 'PAGO' %}
+                                            <span class="inline-block px-3 py-1 rounded-full text-xs font-medium" 
+                                                  style="background-color: #27AE60; color: #FFFFFF;">
+                                                Pago
+                                            </span>
+                                        {% else %}
+                                            <span class="inline-block px-3 py-1 rounded-full text-xs font-medium border" 
+                                                  style="border-color: #E67E22; color: #E67E22;">
+                                                Pendente
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if tem_parcelas_pagas %}
+                            <p class="text-xs mt-3" style="color: #E67E22;">
+                                ⚠️ Esta transação possui parcelas já pagas. Alterações afetarão apenas parcelas futuras.
+                            </p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            {% endif %}
+            
+            <!-- Erros gerais do formulário -->
+            {% if form.non_field_errors %}
+                <div class="p-4 rounded-lg" style="background-color: #FEF2F2; border: 1px solid #E67E22;">
+                    <p class="text-sm" style="color: #E67E22;">{{ form.non_field_errors.0 }}</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Botões de Ação -->
+        <div class="flex gap-3 justify-end">
+            <a href="{% url 'movement_list' %}" 
+               class="px-6 py-3 rounded-lg font-medium transition hover:opacity-90 border"
+               style="border-color: #E9E4DB; color: #706B63;">
+                Cancelar
+            </a>
+            <button type="submit" 
+                    class="px-6 py-3 rounded-lg font-medium transition hover:opacity-90"
+                    style="background-color: #D4AF37; color: #FFFFFF;">
+                {% if transaction %}Atualizar{% else %}Criar{% endif %} {% if form_type == 'revenue' %}Receita{% else %}Despesa{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Modal para Nova Subcategoria (apenas para despesas) -->
+{% if form_type == 'expense' %}
+<div id="subcategoryModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0, 0, 0, 0.5);">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold" style="color: #2D2926;">Nova Subcategoria</h3>
+            <button onclick="closeSubcategoryModal()" class="text-2xl" style="color: #706B63;">&times;</button>
+        </div>
+        <form id="subcategoryForm" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="subcategory_category" class="block text-sm font-medium mb-2" style="color: #2D2926;">Categoria</label>
+                <select id="subcategory_category" name="category" required
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                    <option value="">Selecione uma categoria</option>
+                    {% if categories %}
+                        {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        {% for category in form.category.field.queryset.all %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+            <div>
+                <label for="subcategory_name" class="block text-sm font-medium mb-2" style="color: #2D2926;">Nome</label>
+                <input type="text" id="subcategory_name" name="name" required
+                       class="w-full px-4 py-2 rounded-lg outline-none transition"
+                       style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                       placeholder="Ex: Aluguel">
+            </div>
+            <div id="subcategoryError" class="hidden text-xs" style="color: #E67E22;"></div>
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeSubcategoryModal()"
+                        class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90 border"
+                        style="border-color: #E9E4DB; color: #706B63;">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
+                        style="background-color: #D4AF37; color: #FFFFFF;">
+                    Criar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para Editar/Excluir Subcategoria -->
+<div id="editSubcategoryModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0, 0, 0, 0.5);">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold" style="color: #2D2926;">Editar Subcategoria</h3>
+            <button onclick="closeEditSubcategoryModal()" class="text-2xl" style="color: #706B63;">&times;</button>
+        </div>
+        <form id="editSubcategoryForm" class="space-y-4">
+            {% csrf_token %}
+            <input type="hidden" id="edit_subcategory_id" name="subcategory_id">
+            <div>
+                <label for="edit_subcategory_category" class="block text-sm font-medium mb-2" style="color: #2D2926;">Categoria</label>
+                <select id="edit_subcategory_category" name="category" required
+                        class="w-full px-4 py-2 rounded-lg outline-none transition"
+                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;">
+                    <option value="">Selecione uma categoria</option>
+                    {% if categories %}
+                        {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        {% for category in form.category.field.queryset.all %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+            <div>
+                <label for="edit_subcategory_name" class="block text-sm font-medium mb-2" style="color: #2D2926;">Nome</label>
+                <input type="text" id="edit_subcategory_name" name="name" required
+                       class="w-full px-4 py-2 rounded-lg outline-none transition"
+                       style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                       placeholder="Ex: Aluguel">
+            </div>
+            <div id="editSubcategoryError" class="hidden text-xs" style="color: #E67E22;"></div>
+            <div class="flex gap-3 justify-between">
+                <button type="button" 
+                        onclick="deleteSubcategory()"
+                        class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
+                        style="background-color: #E67E22; color: #FFFFFF;">
+                    🗑️ Excluir
+                </button>
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeEditSubcategoryModal()"
+                            class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90 border"
+                            style="border-color: #E9E4DB; color: #706B63;">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
+                            style="background-color: #D4AF37; color: #FFFFFF;">
+                        Salvar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal para Novo Canal de Venda (apenas para receitas) -->
+{% if form_type == 'revenue' %}
+<div id="salesChannelModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background-color: rgba(0, 0, 0, 0.5);">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold" style="color: #2D2926;">Novo Canal de Venda</h3>
+            <button onclick="closeSalesChannelModal()" class="text-2xl" style="color: #706B63;">&times;</button>
+        </div>
+        <form id="salesChannelForm" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="sales_channel_name" class="block text-sm font-medium mb-2" style="color: #2D2926;">Nome</label>
+                <input type="text" id="sales_channel_name" name="name" required
+                       class="w-full px-4 py-2 rounded-lg outline-none transition"
+                       style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                       placeholder="Ex: iFood, Balcão, Delivery Próprio">
+            </div>
+            <div>
+                <label for="sales_channel_description" class="block text-sm font-medium mb-2" style="color: #2D2926;">Descrição (opcional)</label>
+                <textarea id="sales_channel_description" name="description" rows="3"
+                          class="w-full px-4 py-2 rounded-lg outline-none transition"
+                          style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                          placeholder="Descrição adicional do canal"></textarea>
+            </div>
+            <div id="salesChannelError" class="hidden text-xs" style="color: #E67E22;"></div>
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeSalesChannelModal()"
+                        class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90 border"
+                        style="border-color: #E9E4DB; color: #706B63;">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
+                        style="background-color: #D4AF37; color: #FFFFFF;">
+                    Criar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Carrega subcategorias dinamicamente quando a categoria é selecionada (apenas para despesas)
+{% if form_type == 'expense' %}
+document.addEventListener('DOMContentLoaded', function() {
+    const categorySelect = document.getElementById('id_category');
+    const subcategorySelect = document.getElementById('id_subcategory');
+    
+    // Inicializa Select2 no dropdown de subcategoria para busca
+    if (subcategorySelect) {
+        $(subcategorySelect).select2({
+            placeholder: 'Selecione ou busque uma subcategoria',
+            allowClear: true,
+            language: {
+                noResults: function() {
+                    return 'Nenhuma subcategoria encontrada';
+                },
+                searching: function() {
+                    return 'Buscando...';
+                }
+            },
+            width: '100%',
+            theme: 'default',
+            dropdownCssClass: 'select2-dropdown-custom'
+        });
+    }
+    
+    // Função para carregar TODAS as subcategorias (sem filtro de categoria)
+    function loadAllSubcategories() {
+        return new Promise((resolve, reject) => {
+            console.log('[loadAllSubcategories] Carregando todas as subcategorias do tenant');
+            
+            // Mostra loading
+            $(subcategorySelect).empty().append('<option value="">Carregando...</option>').prop('disabled', true);
+            $(subcategorySelect).trigger('change');
+            
+            // Faz requisição AJAX para buscar todas as subcategorias
+            fetch('/movimentacoes/api/subcategories/all/')
+                .then(response => {
+                    console.log('[loadAllSubcategories] Resposta recebida, status:', response.status);
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            console.error('[loadAllSubcategories] Erro na resposta:', err);
+                            throw new Error(err.error || 'Erro ao carregar subcategorias');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('[loadAllSubcategories] Dados recebidos:', data);
+                    $(subcategorySelect).empty().append('<option value="">Selecione uma subcategoria</option>');
+                    
+                    const subcategories = data.subcategories || [];
+                    console.log('[loadAllSubcategories] Número de subcategorias:', subcategories.length);
+                    
+                    if (subcategories && subcategories.length > 0) {
+                        subcategories.forEach(subcat => {
+                            // Exibe subcategoria com categoria entre parênteses para facilitar identificação
+                            const displayName = `${subcat.name} (${subcat.category_name})`;
+                            console.log('[loadAllSubcategories] Adicionando subcategoria:', displayName, subcat.id);
+                            const option = new Option(displayName, subcat.id, false, false);
+                            $(subcategorySelect).append(option);
+                        });
+                    } else {
+                        console.warn('[loadAllSubcategories] Nenhuma subcategoria encontrada');
+                    }
+                    
+                    // Atualiza Select2
+                    $(subcategorySelect).prop('disabled', false);
+                    $(subcategorySelect).trigger('change.select2');
+                    resolve();
+                })
+                .catch(error => {
+                    console.error('[loadAllSubcategories] Erro ao carregar subcategorias:', error);
+                    $(subcategorySelect).empty().append('<option value="">Erro ao carregar</option>');
+                    $(subcategorySelect).prop('disabled', false).trigger('change');
+                    reject(error);
+                });
+        });
+    }
+    
+    // Função para carregar subcategorias de uma categoria específica
+    function loadSubcategories(categoryId) {
+        return new Promise((resolve, reject) => {
+            if (!categoryId) {
+                // Se não houver categoria, carrega todas as subcategorias
+                loadAllSubcategories().then(resolve).catch(reject);
+                return;
+            }
+            
+            console.log('[loadSubcategories] Carregando subcategorias para categoria:', categoryId);
+            
+            // Mostra loading
+            $(subcategorySelect).empty().append('<option value="">Carregando...</option>').prop('disabled', true);
+            $(subcategorySelect).trigger('change');
+            
+            // Faz requisição AJAX para buscar subcategorias da categoria
+            fetch(`/movimentacoes/api/categories/${categoryId}/subcategories/`)
+                .then(response => {
+                    console.log('[loadSubcategories] Resposta recebida, status:', response.status);
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            console.error('[loadSubcategories] Erro na resposta:', err);
+                            throw new Error(err.error || 'Erro ao carregar subcategorias');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('[loadSubcategories] Dados recebidos:', data);
+                    $(subcategorySelect).empty().append('<option value="">Selecione uma subcategoria</option>');
+                    
+                    const subcategories = data.subcategories || [];
+                    console.log('[loadSubcategories] Número de subcategorias:', subcategories.length);
+                    
+                    if (subcategories && subcategories.length > 0) {
+                        subcategories.forEach(subcat => {
+                            console.log('[loadSubcategories] Adicionando subcategoria:', subcat.name, subcat.id);
+                            const option = new Option(subcat.name, subcat.id, false, false);
+                            $(subcategorySelect).append(option);
+                        });
+                    } else {
+                        console.warn('[loadSubcategories] Nenhuma subcategoria encontrada para categoria:', categoryId);
+                    }
+                    
+                    // Atualiza Select2 - IMPORTANTE: precisa atualizar o Select2 após adicionar opções
+                    $(subcategorySelect).prop('disabled', false);
+                    // Força o Select2 a recarregar as opções
+                    $(subcategorySelect).trigger('change.select2');
+                    resolve();
+                })
+                .catch(error => {
+                    console.error('[loadSubcategories] Erro ao carregar subcategorias:', error);
+                    $(subcategorySelect).empty().append('<option value="">Erro ao carregar</option>');
+                    $(subcategorySelect).prop('disabled', false).trigger('change');
+                    reject(error);
+                });
+        });
+    }
+    
+    // Carrega subcategorias quando categoria muda
+    if (categorySelect && subcategorySelect) {
+        categorySelect.addEventListener('change', function() {
+            // Se categoria foi limpa, carrega todas as subcategorias
+            // Se categoria foi selecionada, carrega apenas as subcategorias daquela categoria
+            loadSubcategories(this.value);
+        });
+        
+        // Quando uma subcategoria é selecionada, preenche automaticamente a categoria
+        $(subcategorySelect).on('change', function() {
+            const subcategoryId = $(this).val();
+            if (subcategoryId && categorySelect) {
+                // Busca os detalhes da subcategoria para obter a categoria
+                fetch(`/movimentacoes/api/subcategories/${subcategoryId}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.subcategory && data.subcategory.category_id) {
+                            // Preenche a categoria automaticamente
+                            if (categorySelect.value !== data.subcategory.category_id) {
+                                categorySelect.value = data.subcategory.category_id;
+                                // Dispara evento change para atualizar as subcategorias filtradas
+                                categorySelect.dispatchEvent(new Event('change'));
+                                
+                                // Após atualizar, garante que a subcategoria selecionada permaneça
+                                setTimeout(() => {
+                                    $(subcategorySelect).val(subcategoryId).trigger('change');
+                                }, 100);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('[Auto-fill category] Erro ao buscar detalhes da subcategoria:', error);
+                    });
+            }
+        });
+        
+        // Carrega subcategorias ao carregar a página
+        if (categorySelect && categorySelect.value) {
+            // Modo edição: carrega subcategorias da categoria selecionada
+            const selectedSubcategoryId = {% if form.subcategory.value %}'{{ form.subcategory.value }}'{% else %}null{% endif %};
+            loadSubcategories(categorySelect.value).then(() => {
+                // Se estiver editando e tiver subcategoria selecionada, marca como selecionada no Select2
+                if (selectedSubcategoryId) {
+                    $(subcategorySelect).val(selectedSubcategoryId).trigger('change');
+                }
+            });
+        } else {
+            // Modo criação: carrega todas as subcategorias
+            loadAllSubcategories();
+        }
+    }
+    
+    // Controle de periodicidade e vencimentos personalizados
+    const numParcelasInput = document.getElementById('id_num_parcelas');
+    const periodicidadeSelect = document.getElementById('id_periodicidade');
+    const periodicidadeContainer = document.getElementById('periodicidade_container');
+    const primeiraVencimentoContainer = document.getElementById('primeira_vencimento_container');
+    const vencimentosPersonalizadosContainer = document.getElementById('vencimentos_personalizados_container');
+    const vencimentosPersonalizadosList = document.getElementById('vencimentos_personalizados_list');
+    
+    function updatePeriodicidadeFields() {
+        const numParcelas = numParcelasInput ? parseInt(numParcelasInput.value) || 1 : 1;
+        const periodicidade = periodicidadeSelect ? periodicidadeSelect.value : 'MENSAL';
+        
+        // Mostra/oculta periodicidade apenas se tiver mais de 1 parcela
+        if (periodicidadeContainer) {
+            if (numParcelas > 1) {
+                periodicidadeContainer.classList.remove('hidden');
+            } else {
+                periodicidadeContainer.classList.add('hidden');
+            }
+        }
+        
+        // Se tiver apenas 1 parcela, não precisa de periodicidade
+        if (numParcelas === 1) {
+            if (primeiraVencimentoContainer) primeiraVencimentoContainer.classList.remove('hidden');
+            if (vencimentosPersonalizadosContainer) vencimentosPersonalizadosContainer.classList.add('hidden');
+            return;
+        }
+        
+        if (periodicidade === 'PERSONALIZADO') {
+            // Mostra campos personalizados, oculta primeira vencimento
+            if (primeiraVencimentoContainer) primeiraVencimentoContainer.classList.add('hidden');
+            if (vencimentosPersonalizadosContainer) vencimentosPersonalizadosContainer.classList.remove('hidden');
+            
+            // Gera inputs para cada parcela
+            if (vencimentosPersonalizadosList) {
+                vencimentosPersonalizadosList.innerHTML = '';
+                for (let i = 1; i <= numParcelas; i++) {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-2';
+                    div.innerHTML = `
+                        <label class="text-sm" style="color: #2D2926; min-width: 100px;">Parcela ${i}:</label>
+                        <input type="date" 
+                               name="vencimento_personalizado_${i}" 
+                               required
+                               class="flex-1 px-4 py-2 rounded-lg outline-none transition"
+                               style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                               onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                               onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                    `;
+                    vencimentosPersonalizadosList.appendChild(div);
+                }
+            }
+        } else {
+            // Mostra primeira vencimento, oculta campos personalizados
+            if (primeiraVencimentoContainer) primeiraVencimentoContainer.classList.remove('hidden');
+            if (vencimentosPersonalizadosContainer) vencimentosPersonalizadosContainer.classList.add('hidden');
+        }
+    }
+    
+    // Atualiza quando periodicidade ou número de parcelas mudar
+    if (periodicidadeSelect) {
+        periodicidadeSelect.addEventListener('change', updatePeriodicidadeFields);
+    }
+    if (numParcelasInput) {
+        numParcelasInput.addEventListener('change', updatePeriodicidadeFields);
+        numParcelasInput.addEventListener('input', updatePeriodicidadeFields);
+    }
+    
+    // Inicializa campos
+    updatePeriodicidadeFields();
+    
+    // Sincroniza Data de Vencimento com Data de Competência (apenas para despesas)
+    const competenceDateInput = document.getElementById('id_competence_date');
+    const primeiraVencimentoInput = document.getElementById('id_primeira_vencimento');
+    
+    if (competenceDateInput && primeiraVencimentoInput) {
+        // Função para sincronizar (só preenche se primeira_vencimento estiver vazia)
+        function syncVencimento() {
+            if (competenceDateInput.value && !primeiraVencimentoInput.value) {
+                primeiraVencimentoInput.value = competenceDateInput.value;
+            }
+        }
+        
+        // Sincroniza ao carregar a página (se já tiver data de competência)
+        syncVencimento();
+        
+        // Quando a data de competência mudar, atualiza a data de vencimento (apenas se estiver vazia)
+        competenceDateInput.addEventListener('change', syncVencimento);
+        competenceDateInput.addEventListener('input', syncVencimento);
+    }
+    
+    // Funções para Modal de Subcategoria (tornadas globais para acesso via onclick)
+    window.openSubcategoryModal = function() {
+        // Sincroniza a categoria selecionada no formulário principal com o modal
+        const mainCategorySelect = document.getElementById('id_category');
+        const modalCategorySelect = document.getElementById('subcategory_category');
+        if (mainCategorySelect && mainCategorySelect.value) {
+            modalCategorySelect.value = mainCategorySelect.value;
+        }
+        document.getElementById('subcategoryModal').classList.remove('hidden');
+    };
+
+    window.closeSubcategoryModal = function() {
+        document.getElementById('subcategoryModal').classList.add('hidden');
+        document.getElementById('subcategoryForm').reset();
+        document.getElementById('subcategoryError').classList.add('hidden');
+    };
+
+    // Submit do formulário de subcategoria
+    document.getElementById('subcategoryForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const errorDiv = document.getElementById('subcategoryError');
+        errorDiv.classList.add('hidden');
+        
+        fetch('/movimentacoes/api/subcategories/create/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Seleciona a categoria automaticamente
+                const categorySelect = document.getElementById('id_category');
+                const categoryId = formData.get('category');
+                if (categorySelect && categoryId) {
+                    categorySelect.value = categoryId;
+                    // Dispara evento change para atualizar subcategorias
+                    categorySelect.dispatchEvent(new Event('change'));
+                }
+                
+                // Recarrega as subcategorias para garantir que a nova apareça
+                if (categorySelect && categorySelect.value) {
+                    // Se tem categoria selecionada, carrega apenas as subcategorias daquela categoria
+                    loadSubcategories(categorySelect.value).then(() => {
+                        // Seleciona a nova subcategoria
+                        const subcategorySelect = $('#id_subcategory');
+                        subcategorySelect.val(data.subcategory.id).trigger('change');
+                    });
+                } else {
+                    // Se não tem categoria selecionada, carrega todas as subcategorias
+                    loadAllSubcategories().then(() => {
+                        // Seleciona a nova subcategoria
+                        const subcategorySelect = $('#id_subcategory');
+                        subcategorySelect.val(data.subcategory.id).trigger('change');
+                    });
+                }
+                
+                window.closeSubcategoryModal();
+            } else {
+                errorDiv.textContent = data.error || 'Erro ao criar subcategoria';
+                errorDiv.classList.remove('hidden');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            errorDiv.textContent = 'Erro ao criar subcategoria. Tente novamente.';
+            errorDiv.classList.remove('hidden');
+        });
+    });
+
+    // Fecha modal ao clicar fora
+    document.getElementById('subcategoryModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            window.closeSubcategoryModal();
+        }
+    });
+    
+    document.getElementById('editSubcategoryModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            window.closeEditSubcategoryModal();
+        }
+    });
+    
+    // Funções para Modal de Edição de Subcategoria
+    window.openEditSubcategoryModal = function() {
+        const subcategorySelect = document.getElementById('id_subcategory');
+        const subcategoryId = subcategorySelect.value;
+        
+        if (!subcategoryId) {
+            alert('Selecione uma subcategoria para editar.');
+            return;
+        }
+        
+        // Busca dados da subcategoria
+        fetch(`/movimentacoes/api/subcategories/${subcategoryId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('edit_subcategory_id').value = data.subcategory.id;
+                    document.getElementById('edit_subcategory_name').value = data.subcategory.name;
+                    document.getElementById('edit_subcategory_category').value = data.subcategory.category_id;
+                    document.getElementById('editSubcategoryModal').classList.remove('hidden');
+                } else {
+                    alert(data.error || 'Erro ao carregar subcategoria.');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao carregar subcategoria. Tente novamente.');
+            });
+    };
+    
+    window.closeEditSubcategoryModal = function() {
+        document.getElementById('editSubcategoryModal').classList.add('hidden');
+        document.getElementById('editSubcategoryForm').reset();
+        document.getElementById('editSubcategoryError').classList.add('hidden');
+    };
+    
+    // Função para excluir subcategoria
+    window.deleteSubcategory = function() {
+        const subcategoryId = document.getElementById('edit_subcategory_id').value;
+        
+        if (!subcategoryId) {
+            alert('ID da subcategoria não encontrado.');
+            return;
+        }
+        
+        if (!confirm('Tem certeza que deseja excluir esta subcategoria? Esta ação não pode ser desfeita.')) {
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/movimentacoes/api/subcategories/${subcategoryId}/delete/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove a subcategoria do Select2
+                const subcategorySelect = $('#id_subcategory');
+                subcategorySelect.val(null).trigger('change');
+                
+                // Oculta botão de editar
+                document.getElementById('editSubcategoryBtn').classList.add('hidden');
+                
+                // Recarrega subcategorias
+                const categorySelect = document.getElementById('id_category');
+                if (categorySelect && categorySelect.value) {
+                    loadSubcategories(categorySelect.value);
+                } else {
+                    // Se não tem categoria selecionada, carrega todas as subcategorias
+                    loadAllSubcategories();
+                }
+                
+                window.closeEditSubcategoryModal();
+                alert('Subcategoria excluída com sucesso!');
+            } else {
+                alert(data.error || 'Erro ao excluir subcategoria.');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao excluir subcategoria. Tente novamente.');
+        });
+    };
+    
+    // Submit do formulário de edição de subcategoria
+    document.getElementById('editSubcategoryForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const subcategoryId = formData.get('subcategory_id');
+        const errorDiv = document.getElementById('editSubcategoryError');
+        errorDiv.classList.add('hidden');
+        
+        fetch(`/movimentacoes/api/subcategories/${subcategoryId}/edit/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Atualiza o Select2 com a subcategoria editada
+                const subcategorySelect = $('#id_subcategory');
+                const categorySelect = document.getElementById('id_category');
+                
+                // Atualiza categoria se mudou
+                if (categorySelect && formData.get('category')) {
+                    categorySelect.value = formData.get('category');
+                }
+                
+                // Recarrega subcategorias e seleciona a editada
+                if (categorySelect && categorySelect.value) {
+                    loadSubcategories(categorySelect.value).then(() => {
+                        subcategorySelect.val(subcategoryId).trigger('change');
+                    });
+                } else {
+                    // Se não tem categoria selecionada, carrega todas as subcategorias
+                    loadAllSubcategories().then(() => {
+                        subcategorySelect.val(subcategoryId).trigger('change');
+                    });
+                }
+                
+                window.closeEditSubcategoryModal();
+            } else {
+                errorDiv.textContent = data.error || 'Erro ao editar subcategoria';
+                errorDiv.classList.remove('hidden');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            errorDiv.textContent = 'Erro ao editar subcategoria. Tente novamente.';
+            errorDiv.classList.remove('hidden');
+        });
+    });
+});
+{% endif %}
+
+// Funções para Modal de Canal de Venda (apenas para receitas)
+{% if form_type == 'revenue' %}
+function openSalesChannelModal() {
+    document.getElementById('salesChannelModal').classList.remove('hidden');
+}
+
+function closeSalesChannelModal() {
+    document.getElementById('salesChannelModal').classList.add('hidden');
+    document.getElementById('salesChannelForm').reset();
+    document.getElementById('salesChannelError').classList.add('hidden');
+}
+
+// Sincroniza Data do Primeiro Vencimento com Data de Caixa (apenas para receitas)
+document.addEventListener('DOMContentLoaded', function() {
+    const cashDateInput = document.getElementById('id_cash_date');
+    const primeiraVencimentoInput = document.getElementById('id_primeira_vencimento');
+    
+    if (cashDateInput && primeiraVencimentoInput) {
+        // Função para sincronizar (só preenche se primeira_vencimento estiver vazia)
+        function syncPrimeiraVencimento() {
+            if (cashDateInput.value && !primeiraVencimentoInput.value) {
+                primeiraVencimentoInput.value = cashDateInput.value;
+            }
+        }
+        
+        // Sincroniza ao carregar a página (se já tiver data de caixa)
+        syncPrimeiraVencimento();
+        
+        // Quando a data de caixa mudar, atualiza a primeira vencimento (apenas se estiver vazia)
+        cashDateInput.addEventListener('change', syncPrimeiraVencimento);
+        cashDateInput.addEventListener('input', syncPrimeiraVencimento);
+    }
+});
+
+// Submit do formulário de canal de venda
+document.getElementById('salesChannelForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const errorDiv = document.getElementById('salesChannelError');
+    errorDiv.classList.add('hidden');
+    
+    fetch('/movimentacoes/api/sales-channels/create/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Adiciona o novo canal de venda ao dropdown
+            const salesChannelSelect = document.getElementById('id_sales_channel');
+            const option = document.createElement('option');
+            option.value = data.sales_channel.id;
+            option.textContent = data.sales_channel.name;
+            option.selected = true;
+            salesChannelSelect.appendChild(option);
+            
+            closeSalesChannelModal();
+        } else {
+            errorDiv.textContent = data.error || 'Erro ao criar canal de venda';
+            errorDiv.classList.remove('hidden');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        errorDiv.textContent = 'Erro ao criar canal de venda. Tente novamente.';
+        errorDiv.classList.remove('hidden');
+    });
+});
+
+// Fecha modal ao clicar fora
+document.getElementById('salesChannelModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeSalesChannelModal();
+    }
+});
+{% endif %}
+</script>
+{% endblock %}

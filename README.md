@@ -117,3 +117,4 @@ A plataforma Web deve calcular e exibir:
 
 **"Sempre que houver dúvida sobre uma regra de negócio ou campo de banco de dados, consulte este README. Priorize a consistência contábil sobre a facilidade de implementação."**
 
+

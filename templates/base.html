@@ -1,0 +1,770 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Caixô - Sistema de Gestão Financeira{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Configuração do Tailwind para suportar dark mode
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <link rel="stylesheet" href="{% static 'css/caixo-theme.css' %}">
+    <!-- Script inline bloqueante para aplicar tema ANTES da renderização (evita flash branco) -->
+    <script>
+        (function() {
+            'use strict';
+            // Lê o tema salvo ou usa 'system' como padrão
+            const THEME_STORAGE_KEY = 'caixo-theme';
+            const THEMES = { LIGHT: 'light', DARK: 'dark', SYSTEM: 'system' };
+            
+            function getSavedTheme() {
+                try {
+                    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+                    return saved && (saved === 'light' || saved === 'dark' || saved === 'system') ? saved : THEMES.SYSTEM;
+                } catch (e) {
+                    return THEMES.SYSTEM;
+                }
+            }
+            
+            function isSystemDark() {
+                return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+            
+            function applyThemeImmediately(theme) {
+                const html = document.documentElement;
+                html.classList.remove('dark');
+                
+                let shouldBeDark = false;
+                if (theme === THEMES.DARK) {
+                    shouldBeDark = true;
+                } else if (theme === THEMES.SYSTEM) {
+                    shouldBeDark = isSystemDark();
+                }
+                
+                if (shouldBeDark) {
+                    html.classList.add('dark');
+                }
+            }
+            
+            // Aplica o tema IMEDIATAMENTE, antes de qualquer renderização
+            const savedTheme = getSavedTheme();
+            applyThemeImmediately(savedTheme);
+        })();
+    </script>
+    <!-- Theme Switcher - Carregado depois para funções de mudança de tema -->
+    <script src="{% static 'js/theme-switcher.js' %}"></script>
+    <!-- Select2 para dropdowns com busca -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <style>
+        /* Aplicando paleta Caixô via Tailwind custom */
+        :root {
+            --caixo-gold: #D4AF37;
+            --caixo-gold-hover: #F4D03F;
+            --caixo-bg-primary: #FDFCF9;
+            --caixo-bg-card: #FFFFFF;
+            --caixo-text-primary: #2D2926;
+            --caixo-text-secondary: #706B63;
+            --caixo-border: #E9E4DB;
+            --caixo-success: #27AE60;
+            --caixo-danger: #E67E22;
+            --caixo-info: #2980B9;
+        }
+        
+        /* Dark Mode - Graphite Minimal (Zinc Scale) */
+        .dark {
+            /* Fundo Principal (Carvão Profundo) */
+            --caixo-bg-primary: #09090b; /* zinc-950 */
+            /* Superfícies/Cards (Grafite) */
+            --caixo-bg-card: #18181b; /* zinc-900 */
+            /* Bordas e Divisores (Imperceptíveis) */
+            --caixo-border: #27272a; /* zinc-800 */
+            /* Títulos */
+            --caixo-text-primary: #f4f4f5; /* zinc-100 */
+            /* Corpo de Texto/Dados */
+            --caixo-text-secondary: #a1a1aa; /* zinc-400 */
+            /* Placeholders */
+            --caixo-text-placeholder: #52525b; /* zinc-600 */
+            /* Estados de Foco */
+            --caixo-focus-bg: #27272a; /* zinc-800 */
+            --caixo-focus-border: #3f3f46; /* zinc-700 */
+            --caixo-focus-ring: #3f3f46; /* zinc-700 */
+        }
+        
+        /* Aplica cores do dark mode automaticamente no body */
+        .dark body {
+            background-color: var(--caixo-bg-primary) !important;
+            color: var(--caixo-text-secondary) !important;
+        }
+        
+        /* Transição suave para o dark mode */
+        html, body {
+            transition: background-color 300ms ease, color 300ms ease;
+        }
+        
+        /* Cards e superfícies no dark mode */
+        .dark [style*="background-color: #FFFFFF"],
+        .dark [style*="background-color: #FDFCF9"],
+        .dark [style*="background-color: #FFFFFF"] {
+            background-color: var(--caixo-bg-card) !important;
+        }
+        
+        /* Textos no dark mode */
+        .dark [style*="color: #2D2926"],
+        .dark [style*="color: #706B63"] {
+            color: var(--caixo-text-secondary) !important;
+        }
+        
+        /* Títulos no dark mode */
+        .dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        /* Bordas no dark mode */
+        .dark [style*="border-color: #E9E4DB"],
+        .dark [style*="border-color: #FFFFFF"] {
+            border-color: var(--caixo-border) !important;
+        }
+        
+        /* Inputs, textareas e selects no dark mode */
+        .dark input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),
+        .dark textarea,
+        .dark select {
+            background-color: var(--caixo-bg-card) !important;
+            border-color: var(--caixo-border) !important;
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        /* Placeholders no dark mode */
+        .dark input::placeholder,
+        .dark textarea::placeholder {
+            color: var(--caixo-text-placeholder) !important;
+        }
+        
+        /* Estado de foco nos inputs (NUNCA branco) */
+        .dark input:focus:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),
+        .dark textarea:focus,
+        .dark select:focus {
+            background-color: var(--caixo-focus-bg) !important;
+            border-color: var(--caixo-focus-border) !important;
+            outline: none !important;
+            box-shadow: 0 0 0 2px var(--caixo-focus-ring) !important;
+        }
+        
+        /* Remove sombras azuis/brancas padrão do navegador */
+        .dark input:focus,
+        .dark textarea:focus,
+        .dark select:focus {
+            outline: none !important;
+        }
+        
+        /* Tabelas no dark mode */
+        .dark table {
+            border-color: var(--caixo-border) !important;
+        }
+        
+        .dark thead {
+            background-color: var(--caixo-bg-primary) !important;
+            border-color: var(--caixo-border) !important;
+        }
+        
+        .dark tbody tr {
+            border-bottom-color: var(--caixo-border) !important;
+        }
+        
+        /* Divisores em tabelas (divide-zinc-800) */
+        .dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+            border-color: var(--caixo-border) !important;
+        }
+        
+        /* Links no dark mode */
+        .dark a {
+            color: var(--caixo-text-secondary) !important;
+        }
+        
+        .dark a:hover {
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        /* Sidebar e header no dark mode */
+        .dark aside,
+        .dark header,
+        .dark #sidebar {
+            background-color: var(--caixo-bg-card) !important;
+            border-color: var(--caixo-border) !important;
+        }
+        
+        /* Cards no dark mode - remover bordas brancas */
+        .dark [style*="border"] {
+            border-color: var(--caixo-border) !important;
+        }
+        
+        /* Botões de ação (Nova Receita, Nova Despesa, Nova Empresa) - texto preto no dark mode */
+        .dark .btn-action-primary {
+            color: #000000 !important;
+        }
+        
+        .dark .btn-action-primary svg {
+            color: #000000 !important;
+        }
+        
+        /* Abas ativas no sidebar - texto preto no dark mode */
+        /* Usa seletor mais específico para garantir que funcione com inline styles */
+        .dark nav a[style*="background-color: #F5E6D3"],
+        .dark nav a[style*="background-color:#F5E6D3"],
+        .dark nav a[style*="border-left: 3px solid #D4AF37"],
+        .dark nav a[style*="border-left:3px solid #D4AF37"] {
+            color: #000000 !important;
+        }
+        
+        .dark nav a[style*="background-color: #F5E6D3"] svg,
+        .dark nav a[style*="background-color:#F5E6D3"] svg,
+        .dark nav a[style*="border-left: 3px solid #D4AF37"] svg,
+        .dark nav a[style*="border-left:3px solid #D4AF37"] svg {
+            color: #000000 !important;
+        }
+        
+        /* Alternativa: usando seletor de atributo mais flexível */
+        .dark nav a[style*="#F5E6D3"] {
+            color: #000000 !important;
+        }
+        
+        .dark nav a[style*="#F5E6D3"] svg {
+            color: #000000 !important;
+        }
+        
+        /* Hover nas abas do sidebar - texto cinza escuro no dark mode */
+        .dark nav a:hover:not([style*="#F5E6D3"]) {
+            color: #52525b !important; /* zinc-600 - cinza escuro */
+        }
+        
+        .dark nav a:hover:not([style*="#F5E6D3"]) svg {
+            color: #52525b !important; /* zinc-600 - cinza escuro */
+        }
+        
+        /* Aba ativa com hover também mantém texto preto */
+        .dark nav a[style*="#F5E6D3"]:hover {
+            color: #000000 !important;
+        }
+        
+        .dark nav a[style*="#F5E6D3"]:hover svg {
+            color: #000000 !important;
+        }
+        
+        /* Estilos para Select2 customizado com tema Caixô */
+        .select2-container--default .select2-selection--single {
+            height: 42px !important;
+            border: 1px solid #E9E4DB !important;
+            border-radius: 8px !important;
+            background-color: #FFFFFF !important;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 42px !important;
+            color: #2D2926 !important;
+            padding-left: 16px !important;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px !important;
+            right: 10px !important;
+        }
+        
+        .select2-container--default.select2-container--focus .select2-selection--single {
+            border-color: #D4AF37 !important;
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1) !important;
+        }
+        
+        .select2-dropdown {
+            border: 1px solid #E9E4DB !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        .select2-search--dropdown .select2-search__field {
+            border: 1px solid #E9E4DB !important;
+            border-radius: 6px !important;
+            padding: 8px 12px !important;
+            color: #2D2926 !important;
+        }
+        
+        .select2-search--dropdown .select2-search__field:focus {
+            border-color: #D4AF37 !important;
+            outline: none !important;
+        }
+        
+        .select2-results__option {
+            color: #2D2926 !important;
+            padding: 10px 16px !important;
+        }
+        
+        .select2-results__option--highlighted {
+            background-color: #D4AF37 !important;
+            color: #FFFFFF !important;
+        }
+        
+        .select2-results__option[aria-selected=true] {
+            background-color: rgba(212, 175, 55, 0.1) !important;
+        }
+        
+        /* Select2 no Dark Mode - Graphite Minimal */
+        .dark .select2-container--default .select2-selection--single {
+            background-color: var(--caixo-bg-card) !important;
+            border-color: var(--caixo-border) !important;
+        }
+        
+        .dark .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        .dark .select2-container--default.select2-container--focus .select2-selection--single {
+            background-color: var(--caixo-focus-bg) !important;
+            border-color: var(--caixo-focus-border) !important;
+            box-shadow: 0 0 0 2px var(--caixo-focus-ring) !important;
+        }
+        
+        .dark .select2-dropdown {
+            background-color: var(--caixo-bg-card) !important;
+            border-color: var(--caixo-border) !important;
+        }
+        
+        .dark .select2-search--dropdown .select2-search__field {
+            background-color: var(--caixo-bg-card) !important;
+            border-color: var(--caixo-border) !important;
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        .dark .select2-search--dropdown .select2-search__field:focus {
+            background-color: var(--caixo-focus-bg) !important;
+            border-color: var(--caixo-focus-border) !important;
+        }
+        
+        .dark .select2-results__option {
+            color: var(--caixo-text-secondary) !important;
+        }
+        
+        .dark .select2-results__option--highlighted {
+            background-color: var(--caixo-focus-border) !important;
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        /* Override de inline styles JavaScript que mudam para branco */
+        .dark input[style*="background-color"]:focus,
+        .dark textarea[style*="background-color"]:focus,
+        .dark select[style*="background-color"]:focus {
+            background-color: var(--caixo-focus-bg) !important;
+            border-color: var(--caixo-focus-border) !important;
+        }
+        
+        /* Força override de qualquer estilo inline no dark mode */
+        .dark input:focus,
+        .dark textarea:focus,
+        .dark select:focus {
+            background-color: var(--caixo-focus-bg) !important;
+            border-color: var(--caixo-focus-border) !important;
+            color: var(--caixo-text-primary) !important;
+        }
+        
+        /* Remove box-shadow dourado padrão e aplica zinc */
+        .dark input:focus[style*="boxShadow"],
+        .dark textarea:focus[style*="boxShadow"],
+        .dark select:focus[style*="boxShadow"] {
+            box-shadow: 0 0 0 2px var(--caixo-focus-ring) !important;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body style="background-color: #FDFCF9;" class="transition-colors duration-300">
+    <!-- Container Principal -->
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="hidden lg:flex lg:flex-shrink-0">
+            <div class="flex flex-col w-64" style="background-color: #FFFFFF; border-right: 1px solid #E9E4DB;">
+                <!-- Logo e Dropdown de Empresa -->
+                <div class="px-4 py-4" style="border-bottom: 1px solid #E9E4DB;">
+                    <h1 class="text-xl font-bold mb-3 text-center" style="color: #D4AF37;">Caixô</h1>
+                    
+                    <!-- Dropdown de Troca de Empresa -->
+                    {% if user.is_authenticated %}
+                        {% if user.is_master or user.tenants.count > 1 %}
+                            <form method="post" action="{% url 'switch_tenant' %}" class="mb-2">
+                                {% csrf_token %}
+                                <select name="tenant_id" 
+                                        onchange="this.form.submit()"
+                                        class="w-full px-3 py-2 text-sm rounded-lg outline-none transition"
+                                        style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
+                                        onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
+                                        onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
+                                    {% if user.is_master %}
+                                        <option value="">Todas as Empresas</option>
+                                        {% for tenant in request.all_tenants|default:user.tenants.all %}
+                                            <option value="{{ tenant.id }}" {% if request.tenant and request.tenant.id == tenant.id %}selected{% endif %}>
+                                                {{ tenant.name }}
+                                            </option>
+                                        {% endfor %}
+                                    {% else %}
+                                        {% for tenant in user.tenants.all %}
+                                            <option value="{{ tenant.id }}" {% if request.tenant and request.tenant.id == tenant.id %}selected{% endif %}>
+                                                {{ tenant.name }}
+                                            </option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </form>
+                        {% elif request.tenant %}
+                            <div class="text-xs px-3 py-2 rounded-lg" style="background-color: #FDFCF9; color: #706B63; border: 1px solid #E9E4DB;">
+                                {{ request.tenant.name }}
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <!-- Menu de Navegação -->
+                <nav class="flex-1 px-4 py-6 space-y-2">
+                    <!-- Dashboard (Home) -->
+                    <a href="{% url 'dashboard' %}" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="{% if request.resolver_match.url_name == 'dashboard' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                       onmouseover="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                       onmouseout="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='transparent';{% endif %}">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                        </svg>
+                        Dashboard
+                    </a>
+                    
+                    <!-- Movimentações -->
+                    <a href="{% url 'movement_list' %}" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="{% if 'movement' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                       onmouseover="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                       onmouseout="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Movimentações
+                    </a>
+                    
+                    <!-- Relatórios (DRE) -->
+                    <a href="#" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="color: #706B63;"
+                       onmouseover="this.style.backgroundColor='#FDFCF9';"
+                       onmouseout="this.style.backgroundColor='transparent';">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        Relatórios
+                    </a>
+                    
+                    <!-- Projeções -->
+                    <a href="{% url 'projections' %}" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="{% if request.resolver_match.url_name == 'projections' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                       onmouseover="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                       onmouseout="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='transparent';{% endif %}">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                        Projeções
+                    </a>
+                    
+                    <!-- Empresas (apenas Admin Master) -->
+                    {% if user.is_master %}
+                    <a href="{% url 'tenant_list' %}" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="{% if 'tenant' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                       onmouseover="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                       onmouseout="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                        </svg>
+                        Empresas
+                    </a>
+                    {% endif %}
+                    
+                    <!-- Configurações -->
+                    <a href="{% url 'settings' %}" 
+                       class="flex items-center px-4 py-3 rounded-lg transition"
+                       style="{% if request.resolver_match.url_name == 'settings' or request.resolver_match.url_name == 'change_password' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                       onmouseover="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                       onmouseout="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='transparent';{% endif %}">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        Configurações
+                    </a>
+                </nav>
+
+                <!-- Rodapé da Sidebar -->
+                <div class="p-4" style="border-top: 1px solid #E9E4DB;">
+                    <div class="text-sm">
+                        <p class="font-semibold mb-1" style="color: #2D2926;">{% if request.tenant %}{{ request.tenant.name }}{% else %}Admin Master{% endif %}</p>
+                        <p class="text-xs" style="color: #706B63;">{{ user.email }}</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Navbar Superior -->
+            <header style="background-color: #FFFFFF; border-bottom: 1px solid #E9E4DB;">
+                <div class="flex items-center justify-between h-16 px-4 lg:px-8">
+                    <!-- Botão Menu Mobile -->
+                    <button id="mobile-menu-button" style="color: #706B63;" class="lg:hidden hover:opacity-70">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+
+                    <!-- Título e Informações do Tenant -->
+                    <div class="flex-1 lg:ml-0">
+                        <h2 class="text-lg font-semibold" style="color: #2D2926;">
+                            {% if request.tenant %}{{ request.tenant.name }}{% else %}Admin Master{% endif %}
+                        </h2>
+                        <p class="text-xs" style="color: #706B63;">{{ user.get_role_display }}</p>
+                    </div>
+
+                    <!-- Menu do Usuário -->
+                    <div class="flex items-center space-x-4">
+                        <a href="{% url 'admin:index' %}" 
+                           class="text-sm hidden lg:block hover:opacity-70"
+                           style="color: #706B63;">
+                            Admin
+                        </a>
+                        <a href="{% url 'logout' %}" 
+                           class="text-sm font-medium hover:opacity-70"
+                           style="color: #D4AF37;">
+                            Sair
+                        </a>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Conteúdo da Página -->
+            <main class="flex-1 overflow-y-auto p-4 lg:p-8">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="px-4 py-3 rounded-lg mb-4 border" style="background-color: #F0FDF4; border-color: #27AE60; color: #27AE60;">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Menu Mobile (Overlay) -->
+    <div id="mobile-menu" class="hidden fixed inset-0 z-50 lg:hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50" onclick="toggleMobileMenu()"></div>
+        <div class="fixed left-0 top-0 bottom-0 w-64 transform -translate-x-full transition-transform duration-300" id="mobile-sidebar" style="background-color: #FFFFFF; border-right: 1px solid #E9E4DB;">
+            <div class="flex flex-col h-full">
+                <div class="flex items-center justify-between h-16 px-4" style="border-bottom: 1px solid #E9E4DB;">
+                    <h1 class="text-xl font-bold" style="color: #D4AF37;">Caixô</h1>
+                    <button onclick="toggleMobileMenu()" style="color: #706B63;">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <nav class="flex-1 px-4 py-6 space-y-2">
+                    <a href="{% url 'dashboard' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Dashboard</a>
+                    <a href="{% url 'movement_list' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Movimentações</a>
+                    <a href="#" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Relatórios</a>
+                    <a href="{% url 'projections' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Projeções</a>
+                    {% if user.is_master %}
+                    <a href="{% url 'tenant_list' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Empresas</a>
+                    {% endif %}
+                    <a href="{% url 'settings' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Configurações</a>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle Menu Mobile
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            const sidebar = document.getElementById('mobile-sidebar');
+            menu.classList.toggle('hidden');
+            setTimeout(() => {
+                sidebar.classList.toggle('-translate-x-full');
+            }, 10);
+        }
+
+        if (document.getElementById('mobile-menu-button')) {
+            document.getElementById('mobile-menu-button').addEventListener('click', toggleMobileMenu);
+        }
+        
+        // Força texto cinza escuro no hover das abas do sidebar no dark mode
+        function setupSidebarHover() {
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                // Remove os event handlers inline para poder controlar via JS
+                link.removeAttribute('onmouseover');
+                link.removeAttribute('onmouseout');
+                
+                // Remove event listeners antigos se existirem (evita duplicação)
+                const newLink = link.cloneNode(true);
+                link.parentNode.replaceChild(newLink, link);
+                const currentLink = newLink;
+                
+                // Armazena o estado inicial para detectar se está ativa
+                const originalStyle = currentLink.getAttribute('style') || '';
+                const isActive = originalStyle.includes('#F5E6D3') || 
+                                currentLink.style.backgroundColor === 'rgb(245, 230, 211)';
+                
+                currentLink.addEventListener('mouseenter', function(e) {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    
+                    if (isDark) {
+                        if (isActive) {
+                            // Aba ativa: mantém texto preto
+                            this.style.setProperty('color', '#000000', 'important');
+                            this.style.setProperty('background-color', '#F5E6D3', 'important');
+                            const svg = this.querySelector('svg');
+                            if (svg) svg.style.setProperty('color', '#000000', 'important');
+                        } else {
+                            // Aba inativa: texto cinza escuro no hover
+                            this.style.setProperty('color', '#52525b', 'important'); // zinc-600 - cinza escuro
+                            this.style.setProperty('background-color', '#FDFCF9', 'important');
+                            const svg = this.querySelector('svg');
+                            if (svg) svg.style.setProperty('color', '#52525b', 'important');
+                        }
+                    } else {
+                        // Light mode: comportamento padrão
+                        if (!isActive) {
+                            this.style.backgroundColor = '#FDFCF9';
+                        }
+                    }
+                });
+                
+                currentLink.addEventListener('mouseleave', function(e) {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    
+                    if (isDark) {
+                        if (isActive) {
+                            // Aba ativa: mantém texto preto
+                            this.style.setProperty('color', '#000000', 'important');
+                            this.style.setProperty('background-color', '#F5E6D3', 'important');
+                            const svg = this.querySelector('svg');
+                            if (svg) svg.style.setProperty('color', '#000000', 'important');
+                        } else {
+                            // Aba inativa: volta ao cinza claro padrão
+                            this.style.setProperty('color', '#a1a1aa', 'important'); // zinc-400 - cinza claro
+                            this.style.setProperty('background-color', 'transparent', 'important');
+                            const svg = this.querySelector('svg');
+                            if (svg) svg.style.setProperty('color', '#a1a1aa', 'important');
+                        }
+                    } else {
+                        // Light mode: comportamento padrão
+                        if (!isActive) {
+                            this.style.backgroundColor = 'transparent';
+                        }
+                    }
+                });
+            });
+        }
+        
+        // Executa ao carregar
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupSidebarHover);
+        } else {
+            setupSidebarHover();
+        }
+        
+        // Observa mudanças no tema
+        const themeObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    setTimeout(setupSidebarHover, 100);
+                }
+            });
+        });
+        themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+        
+        // Override de inline styles onfocus/onblur no dark mode
+        // Intercepta eventos de focus/blur para inputs e força estilos do dark mode
+        function setupDarkModeInputOverride() {
+            const isDark = document.documentElement.classList.contains('dark');
+            if (!isDark) return;
+            
+            const inputs = document.querySelectorAll('input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]), textarea, select');
+            inputs.forEach(input => {
+                // Remove atributos onfocus/onblur inline que mudam para branco
+                input.removeAttribute('onfocus');
+                input.removeAttribute('onblur');
+                
+                // Adiciona listener que força estilos do dark mode
+                input.addEventListener('focus', function() {
+                    if (document.documentElement.classList.contains('dark')) {
+                        // Força os estilos do dark mode mesmo se houver inline styles
+                        this.style.setProperty('background-color', '#27272a', 'important'); // zinc-800
+                        this.style.setProperty('border-color', '#3f3f46', 'important'); // zinc-700
+                        this.style.setProperty('box-shadow', '0 0 0 2px #3f3f46', 'important');
+                        this.style.setProperty('color', '#f4f4f5', 'important'); // zinc-100
+                    }
+                }, true); // Use capture phase para interceptar antes
+                
+                input.addEventListener('blur', function() {
+                    if (document.documentElement.classList.contains('dark')) {
+                        // Restaura estilos padrão do dark mode
+                        this.style.setProperty('background-color', '#18181b', 'important'); // zinc-900
+                        this.style.setProperty('border-color', '#27272a', 'important'); // zinc-800
+                        this.style.setProperty('box-shadow', 'none', 'important');
+                        this.style.setProperty('color', '#f4f4f5', 'important');
+                    }
+                }, true);
+            });
+        }
+        
+        // Executa ao carregar
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupDarkModeInputOverride);
+        } else {
+            setupDarkModeInputOverride();
+        }
+        
+        // Re-executa quando o tema muda ou novos elementos são adicionados
+        const observer = new MutationObserver(function(mutations) {
+            let shouldReRun = false;
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    shouldReRun = true;
+                } else if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Verifica se foram adicionados inputs
+                    for (let node of mutation.addedNodes) {
+                        if (node.nodeType === 1 && (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || node.querySelectorAll('input, textarea, select').length > 0)) {
+                            shouldReRun = true;
+                            break;
+                        }
+                    }
+                }
+            });
+            if (shouldReRun) {
+                setTimeout(setupDarkModeInputOverride, 100);
+            }
+        });
+        observer.observe(document.body, { 
+            attributes: true, 
+            attributeFilter: ['class'],
+            childList: true, 
+            subtree: true 
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -42,6 +42,83 @@ class InstallmentStatus(models.TextChoices):
     PAGO = 'PAGO', 'Pago'
 
 
+class TransactionType(models.TextChoices):
+    """Tipo de transação financeira."""
+    RECEITA = 'RECEITA', 'Receita'
+    DESPESA = 'DESPESA', 'Despesa'
+
+
+class SalesChannel(TenantModel):
+    """
+    Canal de Venda - Usado para categorizar receitas.
+    
+    Representa os diferentes canais pelos quais a empresa recebe receitas.
+    Exemplos: Delivery (iFood, Uber Eats), Balcão, Mesa, Delivery Próprio, etc.
+    
+    Características:
+    - Pode ser global (tenant=None) ou específico do tenant
+    - Usado apenas para transações de receita
+    """
+    
+    name = models.CharField(
+        max_length=255,
+        db_index=True,
+        verbose_name='Nome',
+        help_text='Nome do canal de venda (ex: iFood, Balcão, Delivery Próprio)'
+    )
+    
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Descrição',
+        help_text='Descrição adicional do canal de venda'
+    )
+    
+    # Sobrescreve tenant do TenantModel para permitir canais globais
+    tenant = models.ForeignKey(
+        'core.Tenant',
+        on_delete=models.CASCADE,
+        related_name='sales_channels',
+        null=True,
+        blank=True,
+        verbose_name='Tenant',
+        help_text='Tenant proprietário (None para canais globais)',
+        db_index=True
+    )
+    
+    active = models.BooleanField(
+        default=True,
+        verbose_name='Ativo',
+        help_text='Se o canal está ativo e pode ser usado'
+    )
+    
+    class Meta:
+        verbose_name = 'Canal de Venda'
+        verbose_name_plural = 'Canais de Venda'
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['tenant', 'active']),
+            models.Index(fields=['name']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'name'],
+                name='unique_sales_channel_per_tenant',
+                condition=models.Q(tenant__isnull=False)
+            ),
+            models.UniqueConstraint(
+                fields=['name'],
+                name='unique_global_sales_channel',
+                condition=models.Q(tenant__isnull=True)
+            ),
+        ]
+    
+    def __str__(self) -> str:
+        """Representação string do canal de venda."""
+        tenant_info = f" [{self.tenant.name}]" if self.tenant else " [GLOBAL]"
+        return f"{self.name}{tenant_info}"
+
+
 class Category(TenantModel):
     """
     Categoria de despesa no sistema.
@@ -219,7 +296,9 @@ class Transaction(TenantModel):
     
     description = models.TextField(
         verbose_name='Descrição',
-        help_text='Descrição detalhada da transação'
+        help_text='Descrição detalhada da transação',
+        blank=True,
+        null=True
     )
     
     amount = models.DecimalField(
@@ -230,25 +309,61 @@ class Transaction(TenantModel):
         help_text='Valor total bruto da transação'
     )
     
+    transaction_type = models.CharField(
+        max_length=10,
+        choices=TransactionType.choices,
+        default=TransactionType.DESPESA,  # Default temporário para migration
+        verbose_name='Tipo de Transação',
+        help_text='Se é uma receita ou despesa'
+    )
+    
     category = models.ForeignKey(
         Category,
         on_delete=models.PROTECT,
         related_name='transactions',
+        null=True,
+        blank=True,
         verbose_name='Categoria',
-        help_text='Categoria da transação'
+        help_text='Categoria da transação (apenas para despesas)'
     )
     
     subcategory = models.ForeignKey(
         Subcategory,
         on_delete=models.PROTECT,
         related_name='transactions',
+        null=True,
+        blank=True,
         verbose_name='Subcategoria',
-        help_text='Subcategoria detalhada da transação'
+        help_text='Subcategoria detalhada da transação (apenas para despesas)'
+    )
+    
+    sales_channel = models.ForeignKey(
+        'SalesChannel',
+        on_delete=models.PROTECT,
+        related_name='transactions',
+        null=True,
+        blank=True,
+        verbose_name='Canal de Venda',
+        help_text='Canal de venda da receita (apenas para receitas)'
     )
     
     competence_date = models.DateField(
         verbose_name='Data de Competência',
-        help_text='Data de competência (mês/ano) para DRE - Quando ocorreu o fato gerador'
+        help_text='Data de competência (mês/ano) para DRE - Quando ocorreu o fato gerador. Para receitas, é a data de início do período.'
+    )
+    
+    competence_date_end = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Fim do Período',
+        help_text='Data de fim do período de competência (apenas para receitas). Se não informada, considera apenas a data de início.'
+    )
+    
+    cash_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Caixa',
+        help_text='Data em que o dinheiro entrou/saiu (apenas para receitas, se diferente da competência)'
     )
     
     supplier = models.CharField(
@@ -257,7 +372,7 @@ class Transaction(TenantModel):
         null=True,
         db_index=True,
         verbose_name='Fornecedor',
-        help_text='Nome do fornecedor/prestador de serviço'
+        help_text='Nome do fornecedor/prestador de serviço (apenas para despesas)'
     )
     
     class Meta:
@@ -266,19 +381,57 @@ class Transaction(TenantModel):
         ordering = ['-competence_date', '-created_at']
         indexes = [
             models.Index(fields=['tenant', '-competence_date']),
+            models.Index(fields=['tenant', 'transaction_type']),
             models.Index(fields=['tenant', 'category']),
             models.Index(fields=['tenant', 'subcategory']),
+            models.Index(fields=['tenant', 'sales_channel']),
             models.Index(fields=['competence_date']),
         ]
     
     def clean(self):
         """Validação adicional do modelo."""
         super().clean()
-        # Garante que subcategoria pertença à categoria informada
-        if self.subcategory.category != self.category:
-            raise ValidationError({
-                'subcategory': 'A subcategoria deve pertencer à categoria informada.'
-            })
+        
+        # Validações específicas por tipo de transação
+        if self.transaction_type == TransactionType.DESPESA:
+            # Despesas devem ter categoria e subcategoria
+            if not self.category:
+                raise ValidationError({
+                    'category': 'Categoria é obrigatória para despesas.'
+                })
+            if not self.subcategory:
+                raise ValidationError({
+                    'subcategory': 'Subcategoria é obrigatória para despesas.'
+                })
+            # Garante que subcategoria pertença à categoria informada
+            if self.subcategory and self.category and self.subcategory.category != self.category:
+                raise ValidationError({
+                    'subcategory': 'A subcategoria deve pertencer à categoria informada.'
+                })
+            # Despesas não devem ter canal de venda
+            if self.sales_channel:
+                raise ValidationError({
+                    'sales_channel': 'Canal de venda não deve ser usado para despesas.'
+                })
+        
+        elif self.transaction_type == TransactionType.RECEITA:
+            # Receitas devem ter canal de venda
+            if not self.sales_channel:
+                raise ValidationError({
+                    'sales_channel': 'Canal de venda é obrigatório para receitas.'
+                })
+            # Receitas não devem ter categoria/subcategoria
+            # Limpa os campos se vierem preenchidos (em vez de levantar erro)
+            if self.category:
+                self.category = None
+            if self.subcategory:
+                self.subcategory = None
+            # Valida que data de fim seja maior ou igual à data de início
+            if self.competence_date_end and self.competence_date:
+                if self.competence_date_end < self.competence_date:
+                    raise ValidationError({
+                        'competence_date_end': 'A data de fim do período deve ser maior ou igual à data de início.'
+                    })
     
     @property
     def total_installments(self) -> Decimal:
@@ -306,7 +459,8 @@ class Transaction(TenantModel):
     
     def __str__(self) -> str:
         """Representação string da transação."""
-        return f"{self.description} - R$ {self.amount} ({self.competence_date.strftime('%m/%Y')})"
+        desc = self.description or "Sem descrição"
+        return f"{desc} - R$ {self.amount} ({self.competence_date.strftime('%m/%Y')})"
 
 
 class Installment(TenantModel):
@@ -496,7 +650,8 @@ class Installment(TenantModel):
     def __str__(self) -> str:
         """Representação string da parcela."""
         status_icon = "✓" if self.status == InstallmentStatus.PAGO else "⏳"
-        return f"{status_icon} {self.transaction.description} - R$ {self.amount} (Venc: {self.due_date.strftime('%d/%m/%Y')})"
+        desc = self.transaction.description or "Sem descrição"
+        return f"{status_icon} {desc} - R$ {self.amount} (Venc: {self.due_date.strftime('%d/%m/%Y')})"
 
 
 class ParsingSessionStatus(models.TextChoices):

@@ -1,0 +1,131 @@
+/**
+ * Paleta de Cores Caixô - Ouro Caixô
+ * 
+ * Regra 60-30-10:
+ * - 60% Tons Neutros (Brancos ou Grafites)
+ * - 30% Tons de suporte (Cinzas ou Bege)
+ * - 10% Dourado (Apenas onde o usuário precisa clicar ou prestar atenção)
+ */
+
+:root {
+    /* Cor de Marca - Ouro Caixô */
+    --caixo-gold: #D4AF37;
+    --caixo-gold-hover: #F4D03F;
+    --caixo-gold-light: #F5E6D3;
+    
+    /* Modo Claro (Welcoming Light) */
+    --caixo-bg-primary: #FDFCF9;
+    --caixo-bg-card: #FFFFFF;
+    --caixo-text-primary: #2D2926;
+    --caixo-text-secondary: #706B63;
+    --caixo-border: #E9E4DB;
+    
+    /* Modo Escuro (Premium Dark) - Para implementação futura */
+    --caixo-dark-bg-primary: #1A1C1E;
+    --caixo-dark-bg-card: #25282B;
+    --caixo-dark-text-primary: #F5F5F5;
+    --caixo-dark-text-secondary: #9A9A9A;
+    --caixo-dark-selection: #3E3A32;
+    
+    /* Cores Semânticas (Financeiro) */
+    --caixo-success: #27AE60; /* Lucro/Entrada - Verde Esmeralda */
+    --caixo-danger: #E67E22; /* Despesa/Alerta - Laranja Terra */
+    --caixo-info: #2980B9; /* Informativo - Azul */
+    
+    /* Cores de Status */
+    --caixo-status-active: #27AE60;
+    --caixo-status-trial: #F4D03F;
+    --caixo-status-inactive: #E67E22;
+}
+
+/* Classes utilitárias para o tema Caixô */
+.bg-caixo-primary {
+    background-color: var(--caixo-bg-primary);
+}
+
+.bg-caixo-card {
+    background-color: var(--caixo-bg-card);
+}
+
+.text-caixo-primary {
+    color: var(--caixo-text-primary);
+}
+
+.text-caixo-secondary {
+    color: var(--caixo-text-secondary);
+}
+
+.border-caixo {
+    border-color: var(--caixo-border);
+}
+
+/* Botões e elementos dourados */
+.bg-caixo-gold {
+    background-color: var(--caixo-gold);
+}
+
+.bg-caixo-gold:hover {
+    background-color: var(--caixo-gold-hover);
+}
+
+.text-caixo-gold {
+    color: var(--caixo-gold);
+}
+
+.border-caixo-gold {
+    border-color: var(--caixo-gold);
+}
+
+/* Cores semânticas */
+.text-caixo-success {
+    color: var(--caixo-success);
+}
+
+.bg-caixo-success {
+    background-color: var(--caixo-success);
+}
+
+.text-caixo-danger {
+    color: var(--caixo-danger);
+}
+
+.bg-caixo-danger {
+    background-color: var(--caixo-danger);
+}
+
+.text-caixo-info {
+    color: var(--caixo-info);
+}
+
+.bg-caixo-info {
+    background-color: var(--caixo-info);
+}
+
+/* Sidebar com tema Caixô */
+.sidebar-caixo {
+    background-color: var(--caixo-bg-card);
+    border-right: 1px solid var(--caixo-border);
+}
+
+.sidebar-item-active {
+    background-color: var(--caixo-gold-light);
+    color: var(--caixo-gold);
+    border-left: 3px solid var(--caixo-gold);
+}
+
+.sidebar-item-active svg {
+    color: var(--caixo-gold);
+}
+
+/* Cards com borda dourada sutil */
+.card-caixo-hero {
+    background-color: var(--caixo-bg-card);
+    border: 1px solid var(--caixo-border);
+    border-top: 3px solid var(--caixo-gold);
+}
+
+/* Tags e badges */
+.badge-caixo-auto {
+    background-color: var(--caixo-gold-light);
+    color: var(--caixo-gold);
+}
