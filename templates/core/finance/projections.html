@@ -5,6 +5,37 @@
 
 {% block content %}
 <div class="space-y-6">
+    <!-- Alerta de Localização Incompleta -->
+    {% if not location_complete %}
+    <div class="rounded-lg shadow-sm p-4" style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B;">
+        <div class="flex items-start">
+            <svg class="w-5 h-5 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #F59E0B;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="flex-1">
+                <h3 class="font-semibold mb-1" style="color: #92400E;">Dados de Localização Incompletos</h3>
+                <p class="text-sm mb-2" style="color: #78350F;">
+                    Para visualizar Previsão do Tempo e Eventos Locais nas projeções, é necessário preencher o <strong>Bairro</strong> e a <strong>Cidade</strong> da empresa.
+                </p>
+                {% if user.role == 'ADMIN_MASTER' %}
+                <a href="{% url 'tenant_edit' tenant.id %}" 
+                   class="inline-flex items-center text-sm font-medium transition hover:opacity-90"
+                   style="color: #92400E;">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                    </svg>
+                    Atualizar dados da empresa
+                </a>
+                {% else %}
+                <p class="text-xs italic" style="color: #78350F;">
+                    Solicite ao administrador master que atualize os dados da empresa nas configurações.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Cabeçalho com Filtro de Período -->
     <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: var(--caixo-bg-card); border: 1px solid var(--caixo-border); border-top: 3px solid #D4AF37;">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -117,11 +148,11 @@
         <div class="rounded-lg shadow-sm p-4 lg:p-6" style="background-color: var(--caixo-bg-card); border: 1px solid var(--caixo-border);">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-medium" style="color: var(--caixo-text-secondary);">Saldo Projetado</h3>
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: {% if saldo_previsto >= 0 %}#27AE60{% else %}#E67E22{% endif %>;">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: {% if saldo_previsto >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
             </div>
-            <p class="text-2xl lg:text-3xl font-bold" style="color: {% if saldo_previsto >= 0 %}#27AE60{% else %}#E67E22{% endif %>;">
+            <p class="text-2xl lg:text-3xl font-bold" style="color: {% if saldo_previsto >= 0 %}#27AE60{% else %}#E67E22{% endif %};">
                 R$ {{ saldo_previsto|currency_br }}
             </p>
             <p class="text-xs mt-2" style="color: var(--caixo-text-secondary);">
@@ -289,9 +320,9 @@
         {% endif %}
     </div>
 </div>
-
 {% endblock content %}
 
+{% block extra_js %}
 <script>
     function openCustomPeriodModal() {
         document.getElementById('customPeriodModal').classList.remove('hidden');
@@ -340,3 +371,4 @@
         });
     });
 </script>
+{% endblock extra_js %}

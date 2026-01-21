@@ -238,12 +238,16 @@ def projections_view(request):
         # 6. INTELIGÊNCIA EXTERNA
         # ============================================
         # Busca dados de clima, feriados e eventos
+        # Utiliza os campos neighborhood e city do tenant para personalização
         
         external_service = get_external_data_service()
         
+        # Verifica se os dados de localização estão preenchidos
+        location_complete = bool(tenant.city and tenant.neighborhood)
+        
         # Clima
         weather_data = {}
-        if tenant.city:
+        if tenant.city and tenant.neighborhood:
             weather_data = external_service.get_weather_forecast(
                 city=tenant.city,
                 neighborhood=tenant.neighborhood,
@@ -260,7 +264,7 @@ def projections_view(request):
         
         # Eventos locais
         events_list = []
-        if tenant.city:
+        if tenant.city and tenant.neighborhood:
             events_list = external_service.get_local_events(
                 city=tenant.city,
                 neighborhood=tenant.neighborhood,
@@ -293,6 +297,9 @@ def projections_view(request):
             'weather_data': weather_data,
             'holidays_list': holidays_list,
             'events_list': events_list,
+            
+            # Alerta de localização
+            'location_complete': location_complete,
         }
         
         return render(request, 'core/finance/projections.html', context)

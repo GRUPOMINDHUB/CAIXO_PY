@@ -66,6 +66,36 @@
                 </div>
             </div>
 
+            <!-- Localização -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Localização</h2>
+                <p class="text-sm" style="color: #706B63;">Esses dados são usados para buscar eventos locais e previsão do tempo na aba Projeções</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Bairro -->
+                    <div>
+                        <label for="{{ form.neighborhood.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.neighborhood.label }}
+                        </label>
+                        {{ form.neighborhood }}
+                        {% if form.neighborhood.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.neighborhood.help_text }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Cidade -->
+                    <div>
+                        <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium mb-2" style="color: #2D2926;">
+                            {{ form.city.label }}
+                        </label>
+                        {{ form.city }}
+                        {% if form.city.help_text %}
+                        <p class="mt-1 text-xs" style="color: #706B63;">{{ form.city.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Configurações -->
             <div class="space-y-4">
                 <h2 class="text-lg font-semibold pb-2 border-b" style="color: #2D2926; border-color: #E9E4DB;">Configurações</h2>

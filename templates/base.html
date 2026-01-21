@@ -391,7 +391,7 @@
                     
                     <!-- Dropdown de Troca de Empresa -->
                     {% if user.is_authenticated %}
-                        {% if user.is_master or user.tenants.count > 1 %}
+                        {% if user.role == 'ADMIN_MASTER' or user.tenants.count > 1 %}
                             <form method="post" action="{% url 'switch_tenant' %}" class="mb-2">
                                 {% csrf_token %}
                                 <select name="tenant_id" 
@@ -400,7 +400,7 @@
                                         style="border: 1px solid #E9E4DB; color: #2D2926; background-color: #FFFFFF;"
                                         onfocus="this.style.borderColor='#D4AF37'; this.style.boxShadow='0 0 0 3px rgba(212, 175, 55, 0.1)';"
                                         onblur="this.style.borderColor='#E9E4DB'; this.style.boxShadow='none';">
-                                    {% if user.is_master %}
+                                    {% if user.role == 'ADMIN_MASTER' %}
                                         <option value="">Todas as Empresas</option>
                                         {% for tenant in request.all_tenants|default:user.tenants.all %}
                                             <option value="{{ tenant.id }}" {% if request.tenant and request.tenant.id == tenant.id %}selected{% endif %}>
@@ -425,81 +425,114 @@
                 </div>
 
                 <!-- Menu de Navegação -->
-                <nav class="flex-1 px-4 py-6 space-y-2">
-                    <!-- Dashboard (Home) -->
-                    <a href="{% url 'dashboard' %}" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="{% if request.resolver_match.url_name == 'dashboard' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
-                       onmouseover="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
-                       onmouseout="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='transparent';{% endif %}">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                        </svg>
-                        Dashboard
-                    </a>
+                <nav class="flex-1 px-4 py-6 space-y-4">
+                    <!-- Seção GESTOR: Dashboard, Movimentações e Projeções -->
+                    <div>
+                        <h3 class="text-xs font-semibold uppercase tracking-wider mb-2 px-4" style="color: #706B63;">Gestão</h3>
+                        <div class="space-y-2">
+                            <!-- Dashboard (Home) -->
+                            <a href="{% url 'dashboard' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition"
+                               style="{% if request.resolver_match.url_name == 'dashboard' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if request.resolver_match.url_name != 'dashboard' %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                </svg>
+                                Dashboard
+                            </a>
+                            
+                            <!-- Movimentações -->
+                            <a href="{% url 'movement_list' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition"
+                               style="{% if 'movement' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Movimentações
+                            </a>
+                            
+                            <!-- Relatórios (DRE) -->
+                            <a href="#" 
+                               class="flex items-center px-4 py-3 rounded-lg transition"
+                               style="color: #706B63;"
+                               onmouseover="this.style.backgroundColor='#FDFCF9';"
+                               onmouseout="this.style.backgroundColor='transparent';">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                Relatórios
+                            </a>
+                            
+                            <!-- Projeções -->
+                            <a href="{% url 'projections' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition"
+                               style="{% if request.resolver_match.url_name == 'projections' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                </svg>
+                                Projeções
+                            </a>
+                        </div>
+                    </div>
                     
-                    <!-- Movimentações -->
-                    <a href="{% url 'movement_list' %}" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="{% if 'movement' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
-                       onmouseover="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
-                       onmouseout="{% if 'movement' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Movimentações
-                    </a>
-                    
-                    <!-- Relatórios (DRE) -->
-                    <a href="#" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="color: #706B63;"
-                       onmouseover="this.style.backgroundColor='#FDFCF9';"
-                       onmouseout="this.style.backgroundColor='transparent';">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                        </svg>
-                        Relatórios
-                    </a>
-                    
-                    <!-- Projeções -->
-                    <a href="{% url 'projections' %}" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="{% if request.resolver_match.url_name == 'projections' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
-                       onmouseover="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
-                       onmouseout="{% if request.resolver_match.url_name != 'projections' %}this.style.backgroundColor='transparent';{% endif %}">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                        </svg>
-                        Projeções
-                    </a>
-                    
-                    <!-- Empresas (apenas Admin Master) -->
-                    {% if user.is_master %}
-                    <a href="{% url 'tenant_list' %}" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="{% if 'tenant' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
-                       onmouseover="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
-                       onmouseout="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-                        </svg>
-                        Empresas
-                    </a>
+                    <!-- Seção MASTER: Administração (apenas ADMIN_MASTER) -->
+                    {% if user.role == 'ADMIN_MASTER' %}
+                    <div>
+                        <div class="flex items-center mb-2 px-4">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #706B63;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                            <h3 class="text-xs font-semibold uppercase tracking-wider" style="color: #706B63;">Administração</h3>
+                        </div>
+                        <div class="space-y-2">
+                            <!-- Gerenciar Empresas -->
+                            <a href="{% url 'tenant_list' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition ml-2"
+                               style="{% if 'tenant' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if 'tenant' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                </svg>
+                                Gerenciar Empresas
+                            </a>
+                            
+                            <!-- Gerenciar Usuários -->
+                            <a href="{% url 'user_list' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition ml-2"
+                               style="{% if 'user' in request.resolver_match.url_name %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if 'user' not in request.resolver_match.url_name %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if 'user' not in request.resolver_match.url_name %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                </svg>
+                                Gerenciar Usuários
+                            </a>
+                        </div>
+                    </div>
                     {% endif %}
                     
                     <!-- Configurações -->
-                    <a href="{% url 'settings' %}" 
-                       class="flex items-center px-4 py-3 rounded-lg transition"
-                       style="{% if request.resolver_match.url_name == 'settings' or request.resolver_match.url_name == 'change_password' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
-                       onmouseover="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
-                       onmouseout="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='transparent';{% endif %}">
-                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        </svg>
-                        Configurações
-                    </a>
+                    <div>
+                        <div class="space-y-2">
+                            <a href="{% url 'settings' %}" 
+                               class="flex items-center px-4 py-3 rounded-lg transition"
+                               style="{% if request.resolver_match.url_name == 'settings' or request.resolver_match.url_name == 'change_password' %}background-color: #F5E6D3; color: #D4AF37; border-left: 3px solid #D4AF37;{% else %}color: #706B63;{% endif %}"
+                               onmouseover="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='#FDFCF9';{% endif %}"
+                               onmouseout="{% if request.resolver_match.url_name != 'settings' and request.resolver_match.url_name != 'change_password' %}this.style.backgroundColor='transparent';{% endif %}">
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                Configurações
+                            </a>
+                        </div>
+                    </div>
                 </nav>
 
                 <!-- Rodapé da Sidebar -->
@@ -576,15 +609,38 @@
                         </svg>
                     </button>
                 </div>
-                <nav class="flex-1 px-4 py-6 space-y-2">
-                    <a href="{% url 'dashboard' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Dashboard</a>
-                    <a href="{% url 'movement_list' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Movimentações</a>
-                    <a href="#" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Relatórios</a>
-                    <a href="{% url 'projections' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Projeções</a>
-                    {% if user.is_master %}
-                    <a href="{% url 'tenant_list' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Empresas</a>
+                <nav class="flex-1 px-4 py-6 space-y-4">
+                    <!-- Seção GESTOR -->
+                    <div>
+                        <h3 class="text-xs font-semibold uppercase tracking-wider mb-2 px-4" style="color: #706B63;">Gestão</h3>
+                        <div class="space-y-2">
+                            <a href="{% url 'dashboard' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Dashboard</a>
+                            <a href="{% url 'movement_list' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Movimentações</a>
+                            <a href="#" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Relatórios</a>
+                            <a href="{% url 'projections' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Projeções</a>
+                        </div>
+                    </div>
+                    
+                    <!-- Seção MASTER -->
+                    {% if user.role == 'ADMIN_MASTER' %}
+                    <div>
+                        <div class="flex items-center mb-2 px-4">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #706B63;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                            <h3 class="text-xs font-semibold uppercase tracking-wider" style="color: #706B63;">Administração</h3>
+                        </div>
+                        <div class="space-y-2">
+                            <a href="{% url 'tenant_list' %}" class="flex items-center px-4 py-3 rounded-lg transition ml-2" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Gerenciar Empresas</a>
+                            <a href="{% url 'user_list' %}" class="flex items-center px-4 py-3 rounded-lg transition ml-2" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Gerenciar Usuários</a>
+                        </div>
+                    </div>
                     {% endif %}
-                    <a href="{% url 'settings' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Configurações</a>
+                    
+                    <!-- Configurações -->
+                    <div>
+                        <a href="{% url 'settings' %}" class="flex items-center px-4 py-3 rounded-lg transition" style="color: #706B63;" onmouseover="this.style.backgroundColor='#FDFCF9';" onmouseout="this.style.backgroundColor='transparent';">Configurações</a>
+                    </div>
                 </nav>
             </div>
         </div>
